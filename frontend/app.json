@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Attach cafe photos to your journal entries",
+        "NSCameraUsageDescription": "Capture cafe photos for your journal"
+      }
     },
     "android": {
       "adaptiveIcon": {
