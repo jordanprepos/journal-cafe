@@ -1,0 +1,93 @@
+{
+  "theme": "Light",
+  "archetype": "Organic & Earthy",
+  "design_philosophy": "Warm, inviting, and sensory. The UI should fade into the background and let the user's cafe photos and journaling shine. Prioritize organic shapes, soft lighting (shadows), and earthy tones over stark digital white or generic tech blues.",
+  "colors": {
+    "background": "#FDFBF7",
+    "surface": "#FFFFFF",
+    "surface_secondary": "#F3EFEA",
+    "primary": "#B85C38",
+    "primary_muted": "#E2C2B3",
+    "text_primary": "#2D2926",
+    "text_secondary": "#7A736E",
+    "border": "#E8E2D9",
+    "success": "#5C7C59",
+    "error": "#A94442",
+    "rating_star": "#D4A373"
+  },
+  "typography": {
+    "heading_font": "Playfair Display, Cormorant Garamond, or a similar high-contrast Serif font (use system serif if custom is unavailable)",
+    "body_font": "Inter, Manrope, or system sans-serif for high legibility",
+    "h1": "text-4xl tracking-tight text-text_primary font-serif",
+    "h2": "text-3xl tracking-tight text-text_primary font-serif",
+    "h3": "text-xl text-text_primary font-serif",
+    "body": "text-base text-text_primary leading-relaxed",
+    "caption": "text-sm text-text_secondary uppercase tracking-wider"
+  },
+  "spacing_and_layout": {
+    "screen_padding": "px-6 py-4",
+    "card_radius": "rounded-3xl",
+    "button_radius": "rounded-full",
+    "image_radius": "rounded-2xl",
+    "item_gap": "gap-6",
+    "container_style": "bg-background flex-1",
+    "card_style": "bg-surface shadow-sm border border-border p-4"
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-white rounded-full py-4 px-8 font-semibold shadow-md active:opacity-80 flex-row justify-center items-center",
+      "secondary": "bg-surface_secondary text-text_primary rounded-full py-4 px-8 font-semibold active:opacity-80 flex-row justify-center items-center",
+      "outline": "border-2 border-primary text-primary rounded-full py-4 px-8 font-semibold flex-row justify-center items-center"
+    },
+    "inputs": {
+      "text_input": "bg-surface border border-border rounded-xl px-4 py-3 text-base text-text_primary focus:border-primary",
+      "multiline": "bg-surface border border-border rounded-xl px-4 py-3 text-base text-text_primary min-h-[120px] focus:border-primary text-top"
+    },
+    "cards": {
+      "feed_card": "mb-6 bg-surface rounded-3xl overflow-hidden border border-border",
+      "image_container": "w-full aspect-[4/3] bg-surface_secondary"
+    },
+    "navigation": {
+      "bottom_tab": "bg-surface border-t border-border py-2 shadow-lg",
+      "header": "bg-background border-b border-transparent"
+    }
+  },
+  "motion": {
+    "button_press": "Scale down slightly to 0.95 opacity 0.8 on active",
+    "screen_transition": "Smooth slide-in or fade"
+  },
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://images.unsplash.com/photo-1691067987594-b1b7f84ba55a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwyfHxjb3p5JTIwY2FmZSUyMGludGVyaW9yfGVufDB8fHx8MTc4MDYzODcwNXww&ixlib=rb-4.1.0&q=85",
+        "category": "feed_placeholder_1",
+        "description": "An overhead view of a restaurant with wooden tables and chairs - ideal for cafe dummy data."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1719581228610-b04fa23d3d26?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwzfHxjb3p5JTIwY2FmZSUyMGludGVyaW9yfGVufDB8fHx8MTc4MDYzODcwNXww&ixlib=rb-4.1.0&q=85",
+        "category": "feed_placeholder_2",
+        "description": "A room filled with lots of potted plants - ideal for cozy cafe vibe dummy data."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1559001724-fbad036dbc9e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHwyfHxsYXR0ZSUyMGFydCUyMGNvZmZlZSUyMGN1cHxlbnwwfHx8fDE3ODA2Mzg3MTF8MA&ixlib=rb-4.1.0&q=85",
+        "category": "feed_placeholder_3",
+        "description": "Cafe latte art close-up - ideal for dummy data."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1593443320739-77f74939d0da?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHwxfHxsYXR0ZSUyMGFydCUyMGNvZmZlZSUyMGN1cHxlbnwwfHx8fDE3ODA2Mzg3MTF8MA&ixlib=rb-4.1.0&q=85",
+        "category": "onboarding_background",
+        "description": "White ceramic cup with saucer on brown wooden table - perfect for auth/onboarding screen."
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Use standard React Native components (View, Text, TextInput, TouchableOpacity, FlatList) or Expo equivalents.",
+    "If using NativeWind, strictly follow the custom color hex codes provided in this JSON.",
+    "For the cafe image gallery, ensure a horizontal ScrollView or FlatList with pagingEnabled or snapToInterval for smooth swiping.",
+    "Every interactive element MUST have a `testID` attribute (React Native equivalent of data-testid), e.g., `testID=\"login-button\"`.",
+    "Use a cozy, serif-based typography for main headings (like the App Name and Screen Titles) to make it feel like a physical journal.",
+    "Make sure icons (use Lucide React Native or Expo vector icons) are sized generously (24px - 28px) and match the text_primary or primary color depending on active state.",
+    "For the Map View, since it's an Expo app, if react-native-maps is used, style the map with a custom JSON map style to look warm/sepia if possible, or stick to standard if time is limited. But the markers should use the primary brand color (#B85C38).",
+    "Avoid stark white (#FFFFFF) for the main app background, use the specified #FDFBF7 (Warm Sand) to give a paper/journal feel."
+  ]
+}
