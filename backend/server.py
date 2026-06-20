@@ -20,7 +20,7 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-JWT_SECRET = os.environ.get('JWT_SECRET', 'cafe-journal-dev-secret-change-in-prod')
+JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRE_DAYS = 30
 
@@ -222,7 +222,10 @@ async def delete_cafe(cafe_id: str, user=Depends(get_current_user)):
 
 @api_router.get("/stats")
 async def stats(user=Depends(get_current_user)):
-    docs = await db.cafes.find({"user_id": user["id"]}, {"_id": 0}).to_list(10000)
+    docs = await db.cafes.find(
+        {"user_id": user["id"]},
+        {"_id": 0, "rating": 1, "favorite_drink": 1, "visited_date": 1},
+    ).to_list(10000)
     total = len(docs)
     avg_rating = round(sum(d["rating"] for d in docs) / total, 2) if total else 0
     # favorite drink (most common)
