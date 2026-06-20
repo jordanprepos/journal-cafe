@@ -4,6 +4,8 @@ A mobile journal for logging every café you visit — capture photos, paste a G
 
 Built with **Expo (React Native)** + **FastAPI** + **MongoDB**.
 
+> 🤖 **Built with [Emergent AI](https://emergent.sh)** — this project was designed, scaffolded, and developed with the help of Emergent's full-stack AI coding agent. From requirement gathering to backend API design, JWT auth, mobile UI, and deployment readiness checks, Emergent assisted at every step.
+
 ---
 
 ## Table of Contents
@@ -391,6 +393,21 @@ Ideas worth building next:
 - **Forgot-password flow** — email-based reset
 - **Offline mode** — local cache + sync on reconnect
 - **Real map view** — render pins on an actual map (needs Google/Mapbox API key)
+
+---
+
+## Credits
+
+This project was built with the help of **[Emergent AI](https://emergent.sh)** — a full-stack AI coding agent that assisted across the entire build:
+
+- 🗣 **Requirement gathering** — interactive scoping of features, integrations, and design choices
+- 🎨 **Design system** — generated the warm earthy theme + design guidelines
+- 🛠 **Backend scaffolding** — FastAPI server, MongoDB schema, JWT auth with bcrypt
+- 📱 **Mobile UI** — Expo Router file-based routing, screens, forms, navigation
+- 🧪 **Automated testing** — 27/27 backend integration tests passed on first run
+- 🔒 **Deployment health checks** — secret scanning, env validation, query optimization
+
+If you want to build your own full-stack mobile app like this, give Emergent a try at [emergent.sh](https://emergent.sh).
 
 ---
 
