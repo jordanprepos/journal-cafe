@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Linking,
   Dimensions,
+  Alert,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -66,6 +68,21 @@ export default function CafeDetail() {
     }
   }
 
+  function confirmDelete() {
+    if (!cafe) return;
+    // Alert.alert buttons are a no-op on web — fall back to window.confirm.
+    if (Platform.OS === "web") {
+      if (window.confirm(`Delete "${cafe.name}"? This can't be undone.`)) {
+        handleDelete();
+      }
+      return;
+    }
+    Alert.alert("Delete café", `Remove "${cafe.name}" from your journal? This can't be undone.`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: handleDelete },
+    ]);
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -102,7 +119,7 @@ export default function CafeDetail() {
               <Ionicons name="create-outline" size={22} color={COLORS.textPrimary} />
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={handleDelete}
+              onPress={confirmDelete}
               style={styles.iconBtn}
               disabled={deleting}
               testID="detail-delete-button"

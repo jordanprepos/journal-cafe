@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import DuplicateKeyError
 import os
 import logging
 import uuid
@@ -136,7 +137,10 @@ async def register(data: UserRegister):
         "hashed_password": hash_password(data.password),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.users.insert_one(user_doc)
+    try:
+        await db.users.insert_one(user_doc)
+    except DuplicateKeyError:
+        raise HTTPException(400, "Email already registered")
     token = create_token(user_id)
     return TokenResponse(
         access_token=token,
@@ -164,7 +168,11 @@ async def me(user=Depends(get_current_user)):
 # ====== Cafe endpoints ======
 @api_router.get("/cafes", response_model=List[Cafe])
 async def list_cafes(user=Depends(get_current_user)):
-    docs = await db.cafes.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    # List view only renders the cover photo — $slice keeps the payload small.
+    docs = await db.cafes.find(
+        {"user_id": user["id"]},
+        {"_id": 0, "photos": {"$slice": 1}},
+    ).sort("created_at", -1).to_list(1000)
     return [Cafe(**d) for d in docs]
 
 
@@ -270,6 +278,12 @@ app.add_middleware(
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+async def create_indexes():
+    await db.users.create_index("email", unique=True)
+    await db.cafes.create_index("user_id")
 
 
 @app.on_event("shutdown")

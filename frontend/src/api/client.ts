@@ -1,3 +1,5 @@
+import { router } from "expo-router";
+
 import { storage } from "@/src/utils/storage";
 
 const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
@@ -24,6 +26,12 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(`${BASE_URL}/api${path}`, { ...opts, headers });
   if (!res.ok) {
+    // Expired/invalid session — send the user back to login. Auth endpoints are
+    // excluded: a 401 there means wrong credentials, shown inline instead.
+    if (res.status === 401 && !path.startsWith("/auth/")) {
+      await clearToken();
+      router.replace("/(auth)/login");
+    }
     let detail = `Error ${res.status}`;
     try {
       const j = await res.json();
