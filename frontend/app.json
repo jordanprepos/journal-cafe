@@ -9,6 +9,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "bundleIdentifier": "com.christopherjtp.cafejournal",
       "supportsTablet": true,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Attach cafe photos to your journal entries",
@@ -16,6 +17,7 @@
       }
     },
     "android": {
+      "package": "com.christopherjtp.cafejournal",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000"
