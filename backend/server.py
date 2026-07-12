@@ -1,9 +1,13 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import DuplicateKeyError
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 import os
 import logging
 import uuid
@@ -25,7 +29,28 @@ JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRE_DAYS = 30
 
-app = FastAPI()
+# Comma-separated origins, e.g. "https://myapp.com,https://preview.myapp.com".
+# Defaults to "*" for local/preview convenience; set explicitly in production.
+ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: ensure indexes exist.
+    await db.users.create_index("email", unique=True)
+    await db.cafes.create_index("user_id")
+    yield
+    # Shutdown: close the Mongo connection.
+    client.close()
+
+
+limiter = Limiter(key_func=get_remote_address)
+app = FastAPI(lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
@@ -125,7 +150,8 @@ async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(securit
 
 # ====== Auth endpoints ======
 @api_router.post("/auth/register", response_model=TokenResponse)
-async def register(data: UserRegister):
+@limiter.limit("5/minute")
+async def register(request: Request, data: UserRegister):
     existing = await db.users.find_one({"email": data.email.lower()})
     if existing:
         raise HTTPException(400, "Email already registered")
@@ -149,7 +175,8 @@ async def register(data: UserRegister):
 
 
 @api_router.post("/auth/login", response_model=TokenResponse)
-async def login(data: UserLogin):
+@limiter.limit("10/minute")
+async def login(request: Request, data: UserLogin):
     user = await db.users.find_one({"email": data.email.lower()}, {"_id": 0})
     if not user or not verify_password(data.password, user["hashed_password"]):
         raise HTTPException(401, "Incorrect email or password")
@@ -268,24 +295,12 @@ async def root():
 
 app.include_router(api_router)
 
+# The app authenticates with bearer tokens (not cookies), so credentialed CORS
+# isn't needed — and "*" origins with allow_credentials=True is invalid anyway.
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=["*"],
+    allow_credentials=False,
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-
-@app.on_event("startup")
-async def create_indexes():
-    await db.users.create_index("email", unique=True)
-    await db.cafes.create_index("user_id")
-
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
