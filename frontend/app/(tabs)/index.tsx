@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -13,8 +13,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import { api, Cafe } from "@/src/api/client";
 import { COLORS, FONTS } from "@/src/theme";
+import { distanceKm, formatDistance } from "@/src/utils/distance";
+
+type SortMode = "recent" | "nearby";
+type CafeWithDistance = Cafe & { _distanceKm?: number };
 
 function Stars({ value }: { value: number }) {
   return (
@@ -37,6 +42,10 @@ export default function Journal() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>("recent");
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locError, setLocError] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -56,15 +65,60 @@ export default function Journal() {
     }, [load])
   );
 
-  const filtered = cafes.filter((c) => {
+  // Opt-in: only prompt for GPS when the user taps "Nearby".
+  async function enableNearby() {
+    setLocError("");
+    if (coords) {
+      setSortMode("nearby");
+      return;
+    }
+    setLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setLocError("Location permission denied — showing most recent instead.");
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      setSortMode("nearby");
+    } catch {
+      setLocError("Couldn't get your location — showing most recent instead.");
+    } finally {
+      setLocating(false);
+    }
+  }
+
+  const visible: CafeWithDistance[] = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      c.name.toLowerCase().includes(q) ||
-      c.favorite_drink.toLowerCase().includes(q) ||
-      c.address.toLowerCase().includes(q)
-    );
-  });
+    const matched = cafes.filter((c) => {
+      if (!q) return true;
+      return (
+        c.name.toLowerCase().includes(q) ||
+        c.favorite_drink.toLowerCase().includes(q) ||
+        c.address.toLowerCase().includes(q)
+      );
+    });
+
+    if (sortMode !== "nearby" || !coords) return matched;
+
+    // Attach distance where coordinates exist; cafés without coords sink last.
+    const withDist: CafeWithDistance[] = matched.map((c) => ({
+      ...c,
+      _distanceKm:
+        c.latitude != null && c.longitude != null
+          ? distanceKm(coords.lat, coords.lng, c.latitude, c.longitude)
+          : undefined,
+    }));
+    return withDist.sort((a, b) => {
+      if (a._distanceKm == null && b._distanceKm == null) return 0;
+      if (a._distanceKm == null) return 1;
+      if (b._distanceKm == null) return -1;
+      return a._distanceKm - b._distanceKm;
+    });
+  }, [cafes, query, sortMode, coords]);
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -94,11 +148,53 @@ export default function Journal() {
         />
       </View>
 
+      <View style={styles.sortRow}>
+        <TouchableOpacity
+          style={[styles.sortPill, sortMode === "recent" && styles.sortPillActive]}
+          onPress={() => setSortMode("recent")}
+          testID="sort-recent"
+        >
+          <Ionicons
+            name="time-outline"
+            size={15}
+            color={sortMode === "recent" ? "#fff" : COLORS.textSecondary}
+          />
+          <Text style={[styles.sortText, sortMode === "recent" && styles.sortTextActive]}>
+            Recent
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.sortPill, sortMode === "nearby" && styles.sortPillActive]}
+          onPress={enableNearby}
+          disabled={locating}
+          testID="sort-nearby"
+        >
+          {locating ? (
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          ) : (
+            <Ionicons
+              name="navigate-outline"
+              size={15}
+              color={sortMode === "nearby" ? "#fff" : COLORS.textSecondary}
+            />
+          )}
+          <Text style={[styles.sortText, sortMode === "nearby" && styles.sortTextActive]}>
+            Nearby
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {locError ? (
+        <Text style={styles.locError} testID="location-error">
+          {locError}
+        </Text>
+      ) : null}
+
       {loading ? (
         <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
-          data={filtered}
+          data={visible}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
           refreshControl={
@@ -142,6 +238,12 @@ export default function Journal() {
                   <Text style={styles.cardMeta}>
                     {item.visited_date || item.created_at.slice(0, 10)}
                   </Text>
+                  {item._distanceKm != null ? (
+                    <View style={styles.distBadge} testID={`cafe-distance-${item.id}`}>
+                      <Ionicons name="navigate" size={11} color={COLORS.primary} />
+                      <Text style={styles.distText}>{formatDistance(item._distanceKm)}</Text>
+                    </View>
+                  ) : null}
                 </View>
                 {item.favorite_drink ? (
                   <Text style={styles.cardDrink} numberOfLines={1}>
@@ -202,6 +304,37 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   search: { flex: 1, color: COLORS.textPrimary, fontSize: 15 },
+  sortRow: { flexDirection: "row", gap: 8, paddingHorizontal: 20, marginBottom: 8 },
+  sortPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  sortPillActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  sortText: { color: COLORS.textSecondary, fontSize: 13, fontWeight: "600" },
+  sortTextActive: { color: "#fff" },
+  locError: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    paddingHorizontal: 20,
+    marginBottom: 4,
+  },
+  distBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: COLORS.surfaceSecondary,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  distText: { color: COLORS.primary, fontSize: 11, fontWeight: "700" },
   card: {
     backgroundColor: COLORS.surface,
     borderRadius: 24,

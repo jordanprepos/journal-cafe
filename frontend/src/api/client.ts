@@ -82,5 +82,7 @@ export type CafeInput = {
   rating: number;
   favorite_drink: string;
   visited_date: string;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 export type Cafe = CafeInput & { id: string; user_id: string; created_at: string };

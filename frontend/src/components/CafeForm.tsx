@@ -16,6 +16,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { CafeInput, Cafe } from "@/src/api/client";
+import { geocodeAddress } from "@/src/utils/geocode";
 import { COLORS, FONTS } from "@/src/theme";
 
 interface Props {
@@ -70,15 +71,42 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
       return;
     }
     try {
+      const addr = address.trim();
+      // Keep coordinates in sync with the address so a café never carries a
+      // location that doesn't match its address.
+      let latitude: number | null = initial?.latitude ?? null;
+      let longitude: number | null = initial?.longitude ?? null;
+      const addressChanged = addr !== (initial?.address ?? "").trim();
+      if (!addr) {
+        // No address → no coordinates.
+        latitude = null;
+        longitude = null;
+      } else if (addressChanged || latitude == null || longitude == null) {
+        // Address is new/changed, or we don't have coords yet → (re)geocode.
+        const geo = await geocodeAddress(addr);
+        if (geo) {
+          latitude = geo.lat;
+          longitude = geo.lng;
+        } else if (addressChanged) {
+          // Changed address we couldn't resolve → drop the now-stale coords
+          // rather than keep a location that no longer matches.
+          latitude = null;
+          longitude = null;
+        }
+        // Unchanged address still missing coords + geocode failed → stays null.
+      }
+      // Otherwise: address unchanged and coords already present → keep them.
       await onSave({
         name: name.trim(),
         photos,
         location_link: locationLink.trim(),
-        address: address.trim(),
+        address: addr,
         notes: notes.trim(),
         rating,
         favorite_drink: favoriteDrink.trim(),
         visited_date: visitedDate.trim() || todayISO(),
+        latitude,
+        longitude,
       });
     } catch (e: any) {
       setError(e.message);
@@ -169,6 +197,9 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
             placeholderTextColor={COLORS.textSecondary}
             testID="form-address-input"
           />
+          <Text style={styles.caption}>
+            Used to place your café on the map for “Nearby” sorting.
+          </Text>
 
           <Label>Favourite drink</Label>
           <TextInput
@@ -276,6 +307,7 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   multiline: { minHeight: 110, paddingTop: 12 },
+  caption: { color: COLORS.textSecondary, fontSize: 12, marginTop: 6 },
   starsRow: { flexDirection: "row", gap: 6, marginVertical: 4 },
   thumb: {
     width: 96,

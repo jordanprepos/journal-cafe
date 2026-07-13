@@ -40,7 +40,13 @@
           "backgroundColor": "#000"
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Café Journal uses your location to sort your logged cafés by how near they are."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
