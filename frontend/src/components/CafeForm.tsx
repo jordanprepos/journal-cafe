@@ -72,16 +72,30 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
     }
     try {
       const addr = address.trim();
-      // Keep any coords from a previous save; only overwrite on a successful lookup.
+      // Keep coordinates in sync with the address so a café never carries a
+      // location that doesn't match its address.
       let latitude: number | null = initial?.latitude ?? null;
       let longitude: number | null = initial?.longitude ?? null;
-      if (addr) {
+      const addressChanged = addr !== (initial?.address ?? "").trim();
+      if (!addr) {
+        // No address → no coordinates.
+        latitude = null;
+        longitude = null;
+      } else if (addressChanged || latitude == null || longitude == null) {
+        // Address is new/changed, or we don't have coords yet → (re)geocode.
         const geo = await geocodeAddress(addr);
         if (geo) {
           latitude = geo.lat;
           longitude = geo.lng;
+        } else if (addressChanged) {
+          // Changed address we couldn't resolve → drop the now-stale coords
+          // rather than keep a location that no longer matches.
+          latitude = null;
+          longitude = null;
         }
+        // Unchanged address still missing coords + geocode failed → stays null.
       }
+      // Otherwise: address unchanged and coords already present → keep them.
       await onSave({
         name: name.trim(),
         photos,

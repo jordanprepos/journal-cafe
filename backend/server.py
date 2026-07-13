@@ -244,7 +244,10 @@ async def get_cafe(cafe_id: str, user=Depends(get_current_user)):
 
 @api_router.put("/cafes/{cafe_id}", response_model=Cafe)
 async def update_cafe(cafe_id: str, data: CafeUpdate, user=Depends(get_current_user)):
-    update_data = {k: v for k, v in data.dict().items() if v is not None}
+    # exclude_unset: only touch fields the client actually sent. This preserves
+    # an explicit null (e.g. clearing latitude/longitude when the address is
+    # removed) while ignoring fields that were simply omitted.
+    update_data = data.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(400, "No fields to update")
     result = await db.cafes.update_one(
