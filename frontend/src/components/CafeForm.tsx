@@ -16,6 +16,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { CafeInput, Cafe } from "@/src/api/client";
+import { geocodeAddress } from "@/src/utils/geocode";
 import { COLORS, FONTS } from "@/src/theme";
 
 interface Props {
@@ -70,15 +71,28 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
       return;
     }
     try {
+      const addr = address.trim();
+      // Keep any coords from a previous save; only overwrite on a successful lookup.
+      let latitude: number | null = initial?.latitude ?? null;
+      let longitude: number | null = initial?.longitude ?? null;
+      if (addr) {
+        const geo = await geocodeAddress(addr);
+        if (geo) {
+          latitude = geo.lat;
+          longitude = geo.lng;
+        }
+      }
       await onSave({
         name: name.trim(),
         photos,
         location_link: locationLink.trim(),
-        address: address.trim(),
+        address: addr,
         notes: notes.trim(),
         rating,
         favorite_drink: favoriteDrink.trim(),
         visited_date: visitedDate.trim() || todayISO(),
+        latitude,
+        longitude,
       });
     } catch (e: any) {
       setError(e.message);
@@ -169,6 +183,9 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
             placeholderTextColor={COLORS.textSecondary}
             testID="form-address-input"
           />
+          <Text style={styles.caption}>
+            Used to place your café on the map for “Nearby” sorting.
+          </Text>
 
           <Label>Favourite drink</Label>
           <TextInput
@@ -276,6 +293,7 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   multiline: { minHeight: 110, paddingTop: 12 },
+  caption: { color: COLORS.textSecondary, fontSize: 12, marginTop: 6 },
   starsRow: { flexDirection: "row", gap: 6, marginVertical: 4 },
   thumb: {
     width: 96,
