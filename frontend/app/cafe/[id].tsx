@@ -15,7 +15,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api, Cafe } from "@/src/api/client";
+import { facilityMeta } from "@/src/constants/facilities";
 import { cafeMapsUrl } from "@/src/utils/maps";
+import { formatPriceRange } from "@/src/utils/price";
 import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 
 const { width } = Dimensions.get("window");
@@ -102,6 +104,8 @@ export default function CafeDetail() {
     );
   }
 
+  const priceLabel = formatPriceRange(cafe.price_min, cafe.price_max, cafe.price_currency);
+
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
@@ -166,11 +170,62 @@ export default function CafeDetail() {
             </View>
           ) : null}
 
+          {(cafe.hospitality ?? 0) > 0 ? (
+            <View style={styles.row}>
+              <Ionicons name="happy-outline" size={18} color={colors.textSecondary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowLabel}>Hospitality</Text>
+                <View style={{ marginTop: 4 }} testID="detail-hospitality">
+                  <Stars value={cafe.hospitality ?? 0} />
+                </View>
+              </View>
+            </View>
+          ) : null}
+
+          {priceLabel ? (
+            <Row icon="pricetag-outline" label="Price range" value={priceLabel} />
+          ) : null}
+
           {cafe.favorite_drink ? (
             <Row icon="cafe-outline" label="Favourite drink" value={cafe.favorite_drink} />
           ) : null}
           {cafe.address ? (
             <Row icon="location-outline" label="Address" value={cafe.address} />
+          ) : null}
+
+          {(cafe.recommended_menu ?? []).length > 0 ? (
+            <View style={styles.blockRow}>
+              <Text style={styles.rowLabel}>Recommended menu</Text>
+              <View style={styles.chipWrap}>
+                {(cafe.recommended_menu ?? []).map((item, idx) => (
+                  <View
+                    key={`${item}-${idx}`}
+                    style={styles.menuChip}
+                    testID={`detail-menu-${idx}`}
+                  >
+                    <Text style={styles.menuChipText}>{item}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {(cafe.facilities ?? []).length > 0 ? (
+            <View style={styles.blockRow}>
+              <Text style={styles.rowLabel}>Facilities</Text>
+              <View style={styles.chipWrap}>
+                {(cafe.facilities ?? []).map((key) => {
+                  const meta = facilityMeta(key);
+                  if (!meta) return null; // unknown key from a newer client — skip
+                  return (
+                    <View key={key} style={styles.facChip} testID={`detail-facility-${key}`}>
+                      <Ionicons name={meta.icon} size={14} color={colors.primary} />
+                      <Text style={styles.facChipText}>{meta.label}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
           ) : null}
 
           <TouchableOpacity
@@ -250,6 +305,30 @@ const makeStyles = themedStyles(({ colors }: Theme) => ({
     borderRadius: RADII.pill,
   },
   tagPillText: { fontFamily: FONTS.sans, fontSize: 11, color: colors.textSecondary },
+  blockRow: {
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+  menuChip: {
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: RADII.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  menuChipText: { fontFamily: FONTS.sansMedium, color: colors.textPrimary, fontSize: 13 },
+  facChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderColor: colors.primaryMuted,
+    borderRadius: RADII.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  facChipText: { fontFamily: FONTS.sansSemi, color: colors.primary, fontSize: 13 },
   row: {
     flexDirection: "row",
     gap: 12,

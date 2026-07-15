@@ -1,5 +1,6 @@
 import { router } from "expo-router";
 
+import type { Facility } from "@/src/constants/facilities";
 import { storage } from "@/src/utils/storage";
 
 const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
@@ -85,5 +86,20 @@ export type CafeInput = {
   tags: string[];
   latitude?: number | null;
   longitude?: number | null;
+  price_min?: number | null;
+  price_max?: number | null;
+  price_currency?: string | null;
+  recommended_menu?: string[];
+  facilities?: Facility[];
+  hospitality?: number;
 };
-export type Cafe = CafeInput & { id: string; user_id: string; created_at: string };
+export type Cafe = CafeInput & {
+  id: string;
+  user_id: string;
+  created_at: string;
+  // Optional to *send*, but the API always returns these — the server defaults
+  // them ([] / 0) even for cafés logged before the fields existed.
+  recommended_menu: string[];
+  facilities: Facility[];
+  hospitality: number;
+};

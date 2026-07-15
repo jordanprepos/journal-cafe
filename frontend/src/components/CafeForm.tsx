@@ -15,8 +15,11 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { CafeInput, Cafe } from "@/src/api/client";
+import { StarPicker } from "@/src/components/StarPicker";
 import { geocodeAddress } from "@/src/utils/geocode";
+import { deviceCurrency } from "@/src/utils/price";
 import { addTag, hasTag, removeTag, MAX_TAGS, PRESET_TAGS } from "@/src/constants/tags";
+import { FACILITIES, Facility } from "@/src/constants/facilities";
 import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 
 interface Props {
@@ -43,7 +46,42 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
   const [visitedDate, setVisitedDate] = useState(initial?.visited_date || todayISO());
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [customTag, setCustomTag] = useState("");
+  const [priceMin, setPriceMin] = useState(
+    initial?.price_min != null ? String(initial.price_min) : "",
+  );
+  const [priceMax, setPriceMax] = useState(
+    initial?.price_max != null ? String(initial.price_max) : "",
+  );
+  // Pre-fill from the device locale so it's usually already correct.
+  const [currency, setCurrency] = useState(initial?.price_currency || deviceCurrency());
+  const [menu, setMenu] = useState<string[]>(initial?.recommended_menu ?? []);
+  const [menuDraft, setMenuDraft] = useState("");
+  const [facilities, setFacilities] = useState<Facility[]>(initial?.facilities ?? []);
+  const [hospitality, setHospitality] = useState(initial?.hospitality ?? 0);
   const [error, setError] = useState("");
+
+  function toggleFacility(key: Facility) {
+    setFacilities((f) => (f.includes(key) ? f.filter((x) => x !== key) : [...f, key]));
+  }
+
+  function addMenuItem() {
+    const item = menuDraft.trim();
+    if (!item) return;
+    // Ignore case-insensitive duplicates.
+    if (!menu.some((m) => m.toLowerCase() === item.toLowerCase())) {
+      setMenu((m) => [...m, item]);
+    }
+    setMenuDraft("");
+  }
+
+  // "" → null; otherwise the parsed number. `undefined` signals an invalid entry.
+  function parsePrice(raw: string): number | null | undefined {
+    const t = raw.trim();
+    if (!t) return null;
+    const n = Number(t);
+    if (!Number.isFinite(n) || n < 0) return undefined;
+    return n;
+  }
 
   function toggleTag(tag: string) {
     setTags((t) => (hasTag(t, tag) ? removeTag(t, tag) : addTag(t, tag)));
@@ -84,6 +122,22 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
     setError("");
     if (!name.trim()) {
       setError("Please give your café a name.");
+      return;
+    }
+    // Mirror the server's price rules so the user gets an inline error, not a 422.
+    const pMin = parsePrice(priceMin);
+    const pMax = parsePrice(priceMax);
+    if (pMin === undefined || pMax === undefined) {
+      setError("Price must be a number of 0 or more.");
+      return;
+    }
+    if (pMin != null && pMax != null && pMax < pMin) {
+      setError("Maximum price can't be lower than the minimum.");
+      return;
+    }
+    const cur = currency.trim().toUpperCase();
+    if ((pMin != null || pMax != null) && !/^[A-Z]{3}$/.test(cur)) {
+      setError("Enter a 3-letter currency code (e.g. EUR) for the price.");
       return;
     }
     try {
@@ -129,6 +183,17 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
         tags: addTag(tags, customTag),
         latitude,
         longitude,
+        price_min: pMin,
+        price_max: pMax,
+        // Only meaningful alongside a price; drop it otherwise.
+        price_currency: pMin != null || pMax != null ? cur : null,
+        // Fold in a half-typed menu item for the same reason as the tag box.
+        recommended_menu: menuDraft.trim() &&
+          !menu.some((m) => m.toLowerCase() === menuDraft.trim().toLowerCase())
+          ? [...menu, menuDraft.trim()]
+          : menu,
+        facilities,
+        hospitality,
       });
     } catch (e: any) {
       setError(e.message);
@@ -258,21 +323,122 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
           </View>
 
           <View style={styles.card}>
-            <Field label="Rating" last>
-              <View style={styles.starsRow}>
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <TouchableOpacity
-                    key={i}
-                    onPress={() => setRating(i === rating ? 0 : i)}
-                    testID={`form-rating-${i}`}
-                  >
-                    <Ionicons
-                      name={i <= rating ? "star" : "star-outline"}
-                      size={30}
-                      color={colors.star}
-                    />
-                  </TouchableOpacity>
-                ))}
+            <Field label="Rating">
+              <StarPicker
+                value={rating}
+                onChange={setRating}
+                testIDPrefix="form-rating"
+                size={30}
+              />
+            </Field>
+            <Field label="Hospitality" hint="How were the staff and service?" last>
+              <StarPicker
+                value={hospitality}
+                onChange={setHospitality}
+                testIDPrefix="form-hospitality"
+                size={30}
+              />
+            </Field>
+          </View>
+
+          <View style={styles.card}>
+            <Field label="Price range" hint="Typical spend per visit." last>
+              <View style={styles.priceRow}>
+                <TextInput
+                  style={[styles.input, styles.priceInput]}
+                  value={priceMin}
+                  onChangeText={setPriceMin}
+                  placeholder="Min"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="decimal-pad"
+                  testID="form-price-min-input"
+                />
+                <TextInput
+                  style={[styles.input, styles.priceInput]}
+                  value={priceMax}
+                  onChangeText={setPriceMax}
+                  placeholder="Max"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="decimal-pad"
+                  testID="form-price-max-input"
+                />
+                <TextInput
+                  style={[styles.input, styles.currencyInput]}
+                  value={currency}
+                  onChangeText={(t) => setCurrency(t.toUpperCase())}
+                  placeholder="CUR"
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="characters"
+                  maxLength={3}
+                  testID="form-currency-input"
+                />
+              </View>
+            </Field>
+          </View>
+
+          <View style={styles.card}>
+            <Field label="Recommended menu" last>
+              <View style={styles.menuRow}>
+                <TextInput
+                  style={[styles.input, styles.menuInput]}
+                  value={menuDraft}
+                  onChangeText={setMenuDraft}
+                  placeholder="e.g. Almond croissant"
+                  placeholderTextColor={colors.textMuted}
+                  onSubmitEditing={addMenuItem}
+                  blurOnSubmit={false}
+                  returnKeyType="done"
+                  testID="form-menu-input"
+                />
+                <TouchableOpacity
+                  style={styles.addBtn}
+                  onPress={addMenuItem}
+                  testID="form-menu-add"
+                >
+                  <Ionicons name="add" size={20} color={colors.onPrimary} />
+                </TouchableOpacity>
+              </View>
+              {menu.length > 0 ? (
+                <View style={styles.tagWrap}>
+                  {menu.map((item, idx) => (
+                    <TouchableOpacity
+                      key={`${item}-${idx}`}
+                      style={styles.menuChip}
+                      onPress={() => setMenu((m) => m.filter((_, i) => i !== idx))}
+                      testID={`form-menu-chip-${idx}`}
+                    >
+                      <Text style={styles.menuChipText}>{item}</Text>
+                      <Ionicons name="close" size={11} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+            </Field>
+          </View>
+
+          <View style={styles.card}>
+            <Field label="Facilities" last>
+              <View style={styles.tagWrap}>
+                {FACILITIES.map((f) => {
+                  const on = facilities.includes(f.key);
+                  return (
+                    <TouchableOpacity
+                      key={f.key}
+                      style={[styles.tagChip, on && styles.tagChipOn]}
+                      onPress={() => toggleFacility(f.key)}
+                      testID={`form-facility-${f.key}`}
+                    >
+                      <Ionicons
+                        name={f.icon}
+                        size={12}
+                        color={on ? colors.onInverseSurface : colors.textSecondary}
+                      />
+                      <Text style={[styles.tagChipText, on && styles.tagChipTextOn]}>
+                        {f.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </Field>
           </View>
@@ -465,6 +631,33 @@ const makeStyles = themedStyles(({ colors, shadows, raisedOutline }: Theme) => (
   splitCell: { flex: 1 },
   splitCellLeft: { flex: 1, borderRightWidth: 1, borderRightColor: colors.borderSubtle },
   starsRow: { flexDirection: "row", gap: 6, marginTop: 6 },
+  priceRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 2 },
+  // minWidth 0 is load-bearing: a TextInput's intrinsic width is ~171px, and a
+  // flex child won't shrink below its content width without it — the currency
+  // field ends up pushed off the edge of the card.
+  priceInput: { flex: 1, minWidth: 0 },
+  // Fits a 3-letter ISO code without stealing width from the amounts.
+  currencyInput: { width: 56, flexShrink: 0 },
+  menuRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 2 },
+  menuInput: { flex: 1, minWidth: 0 },
+  addBtn: {
+    backgroundColor: colors.primary,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: colors.surfaceSecondary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADII.pill,
+  },
+  menuChipText: { fontFamily: FONTS.sansMedium, fontSize: 11, color: colors.textPrimary },
   tagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   tagChip: {
     flexDirection: "row",
