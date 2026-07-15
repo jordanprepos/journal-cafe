@@ -93,9 +93,11 @@ Find the IP with `ipconfig getifaddr en0`.
 
 ## Backend test suite
 
-The suite runs against a live API on `:8001`, and it registers more users than the
-`5/minute` cap on `POST /api/auth/register` allows. Start the backend with rate
-limiting off, or the last registers come back `429`:
+This is an **integration** suite: it hits a live API and reads the base URL from
+`frontend/.env` (`EXPO_PUBLIC_BACKEND_URL`), so Mongo and the backend must be up first.
+
+It also registers more users than the `5/minute` cap on `POST /api/auth/register`
+allows. Start the backend with rate limiting off, or the last registers come back `429`:
 
 ```bash
 RATE_LIMIT_ENABLED=false ./dev-up.sh      # or, if starting uvicorn by hand:

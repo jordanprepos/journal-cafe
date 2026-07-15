@@ -276,6 +276,100 @@ class TestCafes:
         assert r.status_code == 200, r.text
         assert r.json()["tags"] == []
 
+    def test_create_cafe_with_details_round_trip(self, session, user_a):
+        payload = {
+            "name": "TEST Details Cafe",
+            "price_min": 25000,
+            "price_max": 50000,
+            "price_currency": "IDR",
+            "recommended_menu": ["Es kopi susu", "Almond croissant"],
+            "facilities": ["wifi", "outdoor", "power_outlets"],
+            "hospitality": 4,
+        }
+        r = session.post(
+            f"{API}/cafes", json=payload, headers=user_a["headers"], timeout=TIMEOUT
+        )
+        assert r.status_code == 200, r.text
+        cafe = r.json()
+        assert cafe["price_min"] == 25000
+        assert cafe["price_max"] == 50000
+        assert cafe["price_currency"] == "IDR"
+        assert cafe["recommended_menu"] == payload["recommended_menu"]
+        assert cafe["facilities"] == payload["facilities"]
+        assert cafe["hospitality"] == 4
+        # GET to verify persistence (facilities must come back as plain strings)
+        g = session.get(
+            f"{API}/cafes/{cafe['id']}", headers=user_a["headers"], timeout=TIMEOUT
+        )
+        assert g.status_code == 200
+        assert g.json()["facilities"] == ["wifi", "outdoor", "power_outlets"]
+
+    def test_create_cafe_details_default_when_omitted(self, session, user_a):
+        # Cafés without the new fields get safe defaults (mirrors pre-existing docs).
+        r = session.post(
+            f"{API}/cafes",
+            json={"name": "TEST Minimal Cafe"},
+            headers=user_a["headers"],
+            timeout=TIMEOUT,
+        )
+        assert r.status_code == 200, r.text
+        cafe = r.json()
+        assert cafe["facilities"] == []
+        assert cafe["recommended_menu"] == []
+        assert cafe["hospitality"] == 0
+        assert cafe["price_min"] is None
+        assert cafe["price_currency"] is None
+
+    def test_create_cafe_unknown_facility(self, session, user_a):
+        r = session.post(
+            f"{API}/cafes",
+            json={"name": "TEST Bad", "facilities": ["helipad"]},
+            headers=user_a["headers"],
+            timeout=TIMEOUT,
+        )
+        assert r.status_code == 422
+
+    def test_create_cafe_hospitality_out_of_range(self, session, user_a):
+        r = session.post(
+            f"{API}/cafes",
+            json={"name": "TEST Bad", "hospitality": 6},
+            headers=user_a["headers"],
+            timeout=TIMEOUT,
+        )
+        assert r.status_code == 422
+
+    def test_create_cafe_price_max_below_min(self, session, user_a):
+        r = session.post(
+            f"{API}/cafes",
+            json={
+                "name": "TEST Bad",
+                "price_min": 10,
+                "price_max": 2,
+                "price_currency": "EUR",
+            },
+            headers=user_a["headers"],
+            timeout=TIMEOUT,
+        )
+        assert r.status_code == 422
+
+    def test_create_cafe_price_without_currency(self, session, user_a):
+        r = session.post(
+            f"{API}/cafes",
+            json={"name": "TEST Bad", "price_min": 10},
+            headers=user_a["headers"],
+            timeout=TIMEOUT,
+        )
+        assert r.status_code == 422
+
+    def test_create_cafe_bad_currency_format(self, session, user_a):
+        r = session.post(
+            f"{API}/cafes",
+            json={"name": "TEST Bad", "price_min": 10, "price_currency": "eur"},
+            headers=user_a["headers"],
+            timeout=TIMEOUT,
+        )
+        assert r.status_code == 422
+
     def test_create_cafe_rating_out_of_range_high(self, session, user_a):
         r = session.post(
             f"{API}/cafes",
@@ -497,14 +591,15 @@ class TestStats:
 class TestCafeModelBackwardCompat:
     """
     The HTTP suite above can never exercise the real backward-compatibility
-    path: every document it creates now *has* a `tags` key. Cafés written
-    before tags shipped do not, and `Cafe(**doc)` is called on them directly
-    by list/get/update. These tests hit the model itself to cover that.
+    path: every document it creates now *has* the newer keys. Cafés written
+    before tags / price / menu / facilities / hospitality shipped do not, and
+    `Cafe(**doc)` is called on them directly by list/get/update. These tests
+    hit the model itself to cover that.
     """
 
     @staticmethod
     def _legacy_doc(**overrides):
-        """A café document as it was persisted before tags existed."""
+        """A café document as persisted before any of the newer fields existed."""
         doc = {
             "id": str(uuid.uuid4()),
             "user_id": str(uuid.uuid4()),
@@ -542,3 +637,26 @@ class TestCafeModelBackwardCompat:
 
         cafe = Cafe(**self._legacy_doc(tags=["Cozy", "Clean"]))
         assert cafe.tags == ["Cozy", "Clean"]
+
+    def test_document_without_detail_fields_gets_defaults(self):
+        """Price / menu / facilities / hospitality were added after these docs
+        were written, so a legacy document has none of the keys at all."""
+        from server import Cafe
+
+        cafe = Cafe(**self._legacy_doc())
+        assert cafe.price_min is None
+        assert cafe.price_max is None
+        assert cafe.price_currency is None
+        assert cafe.recommended_menu == []
+        assert cafe.facilities == []
+        assert cafe.hospitality == 0
+
+    def test_default_detail_lists_are_not_shared_between_instances(self):
+        from server import Cafe
+
+        a = Cafe(**self._legacy_doc())
+        b = Cafe(**self._legacy_doc())
+        a.recommended_menu.append("Flat white")
+        a.facilities.append("wifi")
+        assert b.recommended_menu == []
+        assert b.facilities == []

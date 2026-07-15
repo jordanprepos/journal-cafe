@@ -50,7 +50,8 @@
         {
           "locationWhenInUsePermission": "Café Journal uses your location to sort your logged cafés by how near they are."
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true

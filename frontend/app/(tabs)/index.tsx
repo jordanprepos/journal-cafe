@@ -15,6 +15,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { api, Cafe } from "@/src/api/client";
+import { FACILITIES, Facility } from "@/src/constants/facilities";
 import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 import { distanceKm, formatDistance } from "@/src/utils/distance";
 
@@ -74,6 +75,18 @@ export default function Journal() {
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState("");
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [facilityFilter, setFacilityFilter] = useState<Facility[]>([]);
+
+  const anyFilterActive = activeTag !== null || facilityFilter.length > 0;
+
+  function toggleFacilityFilter(key: Facility) {
+    setFacilityFilter((f) => (f.includes(key) ? f.filter((x) => x !== key) : [...f, key]));
+  }
+
+  function clearFilters() {
+    setActiveTag(null);
+    setFacilityFilter([]);
+  }
 
   const load = useCallback(async () => {
     try {
@@ -146,6 +159,9 @@ export default function Journal() {
       if (activeTag && !tags.some((t) => t.toLowerCase() === activeTag.toLowerCase())) {
         return false;
       }
+      // Facilities are ANDed — the café must have every selected one.
+      const facs = c.facilities ?? [];
+      if (!facilityFilter.every((f) => facs.includes(f))) return false;
       if (!q) return true;
       return (
         c.name.toLowerCase().includes(q) ||
@@ -171,7 +187,7 @@ export default function Journal() {
       if (b._distanceKm == null) return -1;
       return a._distanceKm - b._distanceKm;
     });
-  }, [cafes, query, activeTag, sortMode, coords]);
+  }, [cafes, query, activeTag, facilityFilter, sortMode, coords]);
 
   const gridData: GridItem[] = useMemo(
     () =>
@@ -245,37 +261,58 @@ export default function Journal() {
         </TouchableOpacity>
       </View>
 
-      {availableTags.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.tagRow}
-          contentContainerStyle={styles.tagRowContent}
+      {/* One filter row for both kinds. Tags are free-form and only appear once
+          used; facilities are a fixed set and carry icons, which keeps the two
+          visually distinct without needing a second row. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tagRow}
+        contentContainerStyle={styles.tagRowContent}
+      >
+        <TouchableOpacity
+          style={[styles.chip, !anyFilterActive && styles.chipActive]}
+          onPress={clearFilters}
+          testID="tag-filter-all"
         >
-          <TouchableOpacity
-            style={[styles.chip, activeTag === null && styles.chipActive]}
-            onPress={() => setActiveTag(null)}
-            testID="tag-filter-all"
-          >
-            <Text style={[styles.chipText, activeTag === null && styles.chipTextActive]}>
-              All
-            </Text>
-          </TouchableOpacity>
-          {availableTags.map((t) => {
-            const on = activeTag?.toLowerCase() === t.toLowerCase();
-            return (
-              <TouchableOpacity
-                key={t}
-                style={[styles.chip, on && styles.chipActive]}
-                onPress={() => setActiveTag(on ? null : t)}
-                testID={`tag-filter-${t.toLowerCase().replace(/\s+/g, "-")}`}
-              >
-                <Text style={[styles.chipText, on && styles.chipTextActive]}>{t}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      ) : null}
+          <Text style={[styles.chipText, !anyFilterActive && styles.chipTextActive]}>
+            All
+          </Text>
+        </TouchableOpacity>
+
+        {availableTags.map((t) => {
+          const on = activeTag?.toLowerCase() === t.toLowerCase();
+          return (
+            <TouchableOpacity
+              key={t}
+              style={[styles.chip, on && styles.chipActive]}
+              onPress={() => setActiveTag(on ? null : t)}
+              testID={`tag-filter-${t.toLowerCase().replace(/\s+/g, "-")}`}
+            >
+              <Text style={[styles.chipText, on && styles.chipTextActive]}>{t}</Text>
+            </TouchableOpacity>
+          );
+        })}
+
+        {FACILITIES.map((f) => {
+          const on = facilityFilter.includes(f.key);
+          return (
+            <TouchableOpacity
+              key={f.key}
+              style={[styles.chip, on && styles.chipActive]}
+              onPress={() => toggleFacilityFilter(f.key)}
+              testID={`filter-facility-${f.key}`}
+            >
+              <Ionicons
+                name={f.icon}
+                size={12}
+                color={on ? colors.onInverseSurface : colors.textSecondary}
+              />
+              <Text style={[styles.chipText, on && styles.chipTextActive]}>{f.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
       {locError ? (
         <Text style={styles.locError} testID="location-error">
@@ -304,13 +341,33 @@ export default function Journal() {
             />
           }
           ListEmptyComponent={
-            <View style={styles.empty} testID="empty-state">
-              <Ionicons name="cafe-outline" size={56} color={colors.primaryMuted} />
-              <Text style={styles.emptyTitle}>No cafés logged yet</Text>
-              <Text style={styles.emptyText}>
-                Tap + to add your first café visit.
-              </Text>
-            </View>
+            cafes.length > 0 ? (
+              // Has cafés, but the search/filters excluded them all.
+              <View style={styles.empty} testID="empty-state-no-matches">
+                <Ionicons name="filter-outline" size={56} color={colors.primaryMuted} />
+                <Text style={styles.emptyTitle}>No matches</Text>
+                <Text style={styles.emptyText}>
+                  No cafés match your search and filters. Try removing one.
+                </Text>
+                {anyFilterActive ? (
+                  <TouchableOpacity
+                    onPress={clearFilters}
+                    style={styles.clearBtn}
+                    testID="clear-filters"
+                  >
+                    <Text style={styles.clearBtnText}>Clear filters</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.empty} testID="empty-state">
+                <Ionicons name="cafe-outline" size={56} color={colors.primaryMuted} />
+                <Text style={styles.emptyTitle}>No cafés logged yet</Text>
+                <Text style={styles.emptyText}>
+                  Tap + to add your first café visit.
+                </Text>
+              </View>
+            )
           }
           renderItem={({ item, index }) =>
             isSpacer(item) ? (
@@ -506,4 +563,13 @@ const makeStyles = themedStyles(({ colors, shadows, raisedOutline }: Theme) => (
     textAlign: "center",
     paddingHorizontal: 40,
   },
+  clearBtn: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: RADII.pill,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+  },
+  clearBtnText: { fontFamily: FONTS.sansSemi, color: colors.primary, fontSize: 14 },
 }));

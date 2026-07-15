@@ -13,8 +13,9 @@ import logging
 import uuid
 import jwt
 import bcrypt
+from enum import Enum
 from pathlib import Path
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, model_validator
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 
@@ -84,7 +85,39 @@ class TokenResponse(BaseModel):
     user: UserPublic
 
 
-class CafeCreate(BaseModel):
+class Facility(str, Enum):
+    """Fixed set of café amenities. Mirrored in frontend/src/constants/facilities.ts —
+    keep the two in sync or a UI chip will 422 on save."""
+    indoor = "indoor"
+    outdoor = "outdoor"
+    wifi = "wifi"
+    smoking_allowed = "smoking_allowed"
+    power_outlets = "power_outlets"
+    parking = "parking"
+    restroom = "restroom"
+    air_conditioning = "air_conditioning"
+    pet_friendly = "pet_friendly"
+
+
+class PriceFields(BaseModel):
+    """Typical spend, in `price_currency` (ISO 4217). Per-café, so cafés logged in
+    different countries keep their own currency. Shared by create + update."""
+
+    price_min: Optional[float] = Field(default=None, ge=0)
+    price_max: Optional[float] = Field(default=None, ge=0)
+    price_currency: Optional[str] = Field(default=None, pattern=r"^[A-Z]{3}$")
+
+    @model_validator(mode="after")
+    def _check_price(self):
+        lo, hi = self.price_min, self.price_max
+        if lo is not None and hi is not None and hi < lo:
+            raise ValueError("price_max must be greater than or equal to price_min")
+        if (lo is not None or hi is not None) and not self.price_currency:
+            raise ValueError("price_currency is required when a price is given")
+        return self
+
+
+class CafeCreate(PriceFields):
     name: str = Field(min_length=1)
     photos: List[str] = []  # base64 strings
     location_link: str = ""  # Google Maps share link
@@ -100,9 +133,12 @@ class CafeCreate(BaseModel):
     # Geocoded from `address` on the client; powers "Nearby" sorting.
     latitude: Optional[float] = Field(default=None, ge=-90, le=90)
     longitude: Optional[float] = Field(default=None, ge=-180, le=180)
+    recommended_menu: List[str] = []
+    facilities: List[Facility] = []
+    hospitality: int = Field(default=0, ge=0, le=5)  # 0 = unset
 
 
-class CafeUpdate(BaseModel):
+class CafeUpdate(PriceFields):
     name: Optional[str] = None
     photos: Optional[List[str]] = None
     location_link: Optional[str] = None
@@ -114,6 +150,9 @@ class CafeUpdate(BaseModel):
     tags: Optional[List[str]] = Field(default=None, max_length=20)
     latitude: Optional[float] = Field(default=None, ge=-90, le=90)
     longitude: Optional[float] = Field(default=None, ge=-180, le=180)
+    recommended_menu: Optional[List[str]] = None
+    facilities: Optional[List[Facility]] = None
+    hospitality: Optional[int] = Field(default=None, ge=0, le=5)
 
 
 class Cafe(BaseModel):
@@ -128,10 +167,17 @@ class Cafe(BaseModel):
     favorite_drink: str
     visited_date: str
     created_at: str
-    # Defaulted so cafés logged before tag/geo support still deserialize.
+    # All below are optional/defaulted so cafés logged before these features
+    # (which lack the keys entirely in Mongo) still deserialize.
     tags: List[str] = []
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    price_min: Optional[float] = None
+    price_max: Optional[float] = None
+    price_currency: Optional[str] = None
+    recommended_menu: List[str] = []
+    facilities: List[Facility] = []
+    hospitality: int = 0
 
 
 # ====== Auth helpers ======
@@ -240,6 +286,13 @@ async def create_cafe(data: CafeCreate, user=Depends(get_current_user)):
         "tags": data.tags,
         "latitude": data.latitude,
         "longitude": data.longitude,
+        "price_min": data.price_min,
+        "price_max": data.price_max,
+        "price_currency": data.price_currency,
+        "recommended_menu": data.recommended_menu,
+        # Store plain strings so BSON gets str, not Enum members.
+        "facilities": [f.value for f in data.facilities],
+        "hospitality": data.hospitality,
         "created_at": now,
     }
     await db.cafes.insert_one(doc.copy())
@@ -259,7 +312,8 @@ async def update_cafe(cafe_id: str, data: CafeUpdate, user=Depends(get_current_u
     # exclude_unset: only touch fields the client actually sent. This preserves
     # an explicit null (e.g. clearing latitude/longitude when the address is
     # removed) while ignoring fields that were simply omitted.
-    update_data = data.model_dump(exclude_unset=True)
+    # mode="json": serialize Facility enums to plain strings for BSON.
+    update_data = data.model_dump(exclude_unset=True, mode="json")
     if not update_data:
         raise HTTPException(400, "No fields to update")
     result = await db.cafes.update_one(
