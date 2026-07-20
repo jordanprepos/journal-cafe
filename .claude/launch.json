@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend-web",
+      "runtimeExecutable": "yarn",
+      "runtimeArgs": ["web"],
+      "cwd": "frontend",
+      "port": 8081
+    }
+  ]
+}
