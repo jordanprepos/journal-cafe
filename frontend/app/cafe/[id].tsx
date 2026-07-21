@@ -16,7 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api, Cafe } from "@/src/api/client";
-import { COLORS, FONTS } from "@/src/theme";
+import { COLORS, FONTS, RADII } from "@/src/theme";
 
 const { width } = Dimensions.get("window");
 
@@ -210,26 +210,25 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   iconBtn: {
-    backgroundColor: "rgba(255,255,255,0.95)",
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
   },
   coverFallback: {
-    backgroundColor: COLORS.surfaceSecondary,
+    backgroundColor: COLORS.surfaceSunken,
     alignItems: "center",
     justifyContent: "center",
   },
-  body: { padding: 24 },
+  body: { padding: 22 },
   name: {
-    fontSize: 30,
+    fontSize: 28,
     fontFamily: FONTS.serif,
-    fontWeight: "600",
     color: COLORS.textPrimary,
   },
-  metaDate: { color: COLORS.textSecondary, fontSize: 14 },
+  metaDate: { fontFamily: FONTS.sans, color: COLORS.textMuted, fontSize: 13 },
   row: {
     flexDirection: "row",
     gap: 12,
@@ -239,29 +238,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   rowLabel: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
+    fontFamily: FONTS.sans,
+    color: COLORS.textMuted,
+    fontSize: 10.5,
     letterSpacing: 1.5,
     textTransform: "uppercase",
   },
-  rowValue: { color: COLORS.textPrimary, fontSize: 16, marginTop: 2 },
+  rowValue: { fontFamily: FONTS.sans, color: COLORS.textPrimary, fontSize: 15, marginTop: 2 },
   mapBtn: {
-    marginTop: 20,
+    marginTop: 16,
     backgroundColor: COLORS.primary,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 8,
     paddingVertical: 14,
-    borderRadius: 999,
+    borderRadius: RADII.pill,
   },
-  mapBtnText: { color: "#fff", fontWeight: "600", fontSize: 15 },
+  mapBtnText: { fontFamily: FONTS.sansSemi, color: "#fff", fontSize: 14 },
   sectionLabel: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
+    fontFamily: FONTS.sans,
+    color: COLORS.textMuted,
+    fontSize: 10.5,
     letterSpacing: 1.5,
     marginBottom: 8,
   },
-  notes: { color: COLORS.textPrimary, fontSize: 16, lineHeight: 24 },
-  muted: { color: COLORS.textSecondary, textAlign: "center", marginTop: 40 },
+  notes: { fontFamily: FONTS.sans, color: COLORS.textPrimary, fontSize: 15, lineHeight: 24 },
+  muted: { fontFamily: FONTS.sans, color: COLORS.textSecondary, textAlign: "center", marginTop: 40 },
 });

@@ -33,6 +33,7 @@ export default function Root({ children }: PropsWithChildren) {
           margin: 0,
           height: "100%",
           overflow: "hidden",
+          backgroundColor: "#FBF6EC",
           display: "flex",
           flexDirection: "column",
         }}

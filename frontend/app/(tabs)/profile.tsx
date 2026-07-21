@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -13,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/context/AuthContext";
 import { api } from "@/src/api/client";
 import { geocodeAddress } from "@/src/utils/geocode";
-import { COLORS, FONTS } from "@/src/theme";
+import { COLORS, FONTS, RADII, SHADOWS } from "@/src/theme";
 
 export default function Profile() {
   const { user, logout } = useAuth();
@@ -68,7 +69,7 @@ export default function Profile() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <View style={{ padding: 20 }}>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120 }}>
         <Text style={styles.eyebrow}>Account</Text>
         <Text style={styles.title}>Profile</Text>
 
@@ -125,7 +126,7 @@ export default function Profile() {
           <Ionicons name="log-out-outline" size={20} color={COLORS.error} />
           <Text style={styles.logoutText}>Log out</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -133,27 +134,26 @@ export default function Profile() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   eyebrow: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    letterSpacing: 2,
+    fontFamily: FONTS.sans,
+    color: COLORS.textMuted,
+    fontSize: 11,
+    letterSpacing: 2.5,
     textTransform: "uppercase",
-    marginBottom: 4,
+    marginBottom: 5,
   },
   title: {
     fontFamily: FONTS.serif,
-    fontSize: 36,
+    fontSize: 32,
     color: COLORS.textPrimary,
-    fontWeight: "600",
-    marginBottom: 24,
+    marginBottom: 18,
   },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderRadius: RADII.cardLarge,
     padding: 24,
     alignItems: "center",
     gap: 6,
+    ...SHADOWS.card,
   },
   avatar: {
     width: 72,
@@ -162,55 +162,52 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  avatarText: { fontSize: 30, color: "#fff", fontWeight: "600" },
+  avatarText: { fontFamily: FONTS.sansBold, fontSize: 30, color: "#fff" },
   name: {
     fontFamily: FONTS.serif,
     fontSize: 22,
     color: COLORS.textPrimary,
-    fontWeight: "600",
   },
-  email: { color: COLORS.textSecondary, fontSize: 14 },
+  email: { fontFamily: FONTS.sans, color: COLORS.textMuted, fontSize: 14 },
   toolCard: {
-    marginTop: 24,
+    marginTop: 16,
     backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderRadius: RADII.card,
     padding: 20,
     gap: 12,
+    ...SHADOWS.card,
   },
   toolHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
   toolTitle: {
     fontFamily: FONTS.serif,
     fontSize: 18,
-    fontWeight: "600",
     color: COLORS.textPrimary,
   },
-  toolDesc: { color: COLORS.textSecondary, fontSize: 13, lineHeight: 19 },
+  toolDesc: { fontFamily: FONTS.sans, color: COLORS.textSecondary, fontSize: 13, lineHeight: 19 },
   toolBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     backgroundColor: COLORS.primary,
-    borderRadius: 999,
+    borderRadius: RADII.pill,
     paddingVertical: 14,
   },
   toolBtnDisabled: { opacity: 0.6 },
-  toolBtnText: { color: "#fff", fontWeight: "600", fontSize: 15 },
-  toolMsg: { color: COLORS.textSecondary, fontSize: 13, lineHeight: 19 },
+  toolBtnText: { fontFamily: FONTS.sansSemi, color: "#fff", fontSize: 14 },
+  toolMsg: { fontFamily: FONTS.sans, color: COLORS.textMuted, fontSize: 13, lineHeight: 19 },
   logoutBtn: {
-    marginTop: 24,
+    marginTop: 20,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     paddingVertical: 16,
-    borderRadius: 999,
+    borderRadius: RADII.pill,
     borderWidth: 1,
     borderColor: COLORS.error,
   },
-  logoutText: { color: COLORS.error, fontWeight: "600", fontSize: 15 },
+  logoutText: { fontFamily: FONTS.sansSemi, color: COLORS.error, fontSize: 15 },
 });

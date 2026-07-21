@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/src/api/client";
-import { COLORS, FONTS } from "@/src/theme";
+import { COLORS, FONTS, RADII, SHADOWS } from "@/src/theme";
 
 interface Stats {
   total_cafes: number;
@@ -39,7 +39,7 @@ export default function StatsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 100 }}>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120 }}>
         <Text style={styles.eyebrow}>Your coffee year</Text>
         <Text style={styles.title}>Stats</Text>
 
@@ -115,10 +115,13 @@ function StatCard({
   value: string;
   testID: string;
 }) {
+  // Long drink names would blow out the tile at display size, so the value
+  // steps down a tier once it stops looking like a number.
+  const compact = value.length > 4;
   return (
     <View style={styles.statCard} testID={testID}>
-      <Ionicons name={icon} size={22} color={COLORS.primary} />
-      <Text style={styles.statValue} numberOfLines={1}>
+      <Ionicons name={icon} size={18} color={COLORS.primary} />
+      <Text style={[styles.statValue, compact && styles.statValueCompact]} numberOfLines={1}>
         {value}
       </Text>
       <Text style={styles.statLabel}>{label}</Text>
@@ -129,62 +132,66 @@ function StatCard({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   eyebrow: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    letterSpacing: 2,
+    fontFamily: FONTS.sans,
+    color: COLORS.textMuted,
+    fontSize: 11,
+    letterSpacing: 2.5,
     textTransform: "uppercase",
-    marginBottom: 4,
+    marginBottom: 5,
   },
   title: {
     fontFamily: FONTS.serif,
-    fontSize: 36,
+    fontSize: 32,
     color: COLORS.textPrimary,
-    fontWeight: "600",
-    marginBottom: 24,
+    marginBottom: 18,
   },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   statCard: {
-    flexBasis: "48%",
+    flexBasis: "47%",
     flexGrow: 1,
     backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderRadius: RADII.card,
     padding: 16,
-    gap: 6,
+    ...SHADOWS.card,
   },
   statValue: {
-    fontSize: 26,
     fontFamily: FONTS.serif,
+    fontSize: 24,
     color: COLORS.textPrimary,
-    fontWeight: "600",
+    marginTop: 4,
   },
-  statLabel: { color: COLORS.textSecondary, fontSize: 12 },
+  statValueCompact: { fontSize: 18, marginTop: 8 },
+  statLabel: { fontFamily: FONTS.sans, color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
   sectionTitle: {
-    marginTop: 32,
-    marginBottom: 12,
+    marginTop: 24,
+    marginBottom: 10,
     fontFamily: FONTS.serif,
-    fontSize: 22,
+    fontSize: 19,
     color: COLORS.textPrimary,
   },
   chartCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderRadius: RADII.card,
     padding: 16,
     gap: 12,
+    ...SHADOWS.card,
   },
   barRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  barLabel: { width: 64, color: COLORS.textSecondary, fontSize: 12 },
+  barLabel: { width: 52, fontFamily: FONTS.sans, color: COLORS.textMuted, fontSize: 11 },
   barTrack: {
     flex: 1,
-    backgroundColor: COLORS.surfaceSecondary,
-    height: 10,
+    backgroundColor: COLORS.surfaceSunken,
+    height: 9,
     borderRadius: 5,
     overflow: "hidden",
   },
-  barFill: { backgroundColor: COLORS.primary, height: "100%" },
-  barCount: { width: 24, textAlign: "right", color: COLORS.textPrimary, fontWeight: "600" },
-  muted: { color: COLORS.textSecondary },
+  barFill: { backgroundColor: COLORS.primary, height: "100%", borderRadius: 5 },
+  barCount: {
+    width: 18,
+    textAlign: "right",
+    fontFamily: FONTS.sansSemi,
+    color: COLORS.textPrimary,
+    fontSize: 12,
+  },
+  muted: { fontFamily: FONTS.sans, color: COLORS.textMuted },
 });
