@@ -190,6 +190,7 @@ class TestCafes:
             "rating": 5,
             "favorite_drink": "Latte",
             "visited_date": "2026-01-10",
+            "tags": ["Cozy", "Free Wifi"],
         }
         r = session.post(
             f"{API}/cafes", json=payload, headers=user_a["headers"], timeout=TIMEOUT
@@ -204,13 +205,70 @@ class TestCafes:
         assert cafe["rating"] == 5
         assert cafe["favorite_drink"] == "Latte"
         assert cafe["visited_date"] == "2026-01-10"
+        assert cafe["tags"] == payload["tags"]
         # GET to verify persistence
         g = session.get(
             f"{API}/cafes/{cafe['id']}", headers=user_a["headers"], timeout=TIMEOUT
         )
         assert g.status_code == 200
         assert g.json()["name"] == payload["name"]
+        # create_cafe builds its document field-by-field, so a field can validate
+        # fine and still never reach Mongo. Re-read to prove it actually persisted.
+        assert g.json()["tags"] == payload["tags"]
         pytest.cafe_id_a = cafe["id"]  # type: ignore
+
+    def test_create_cafe_without_tags_defaults_to_empty(self, session, user_a):
+        r = session.post(
+            f"{API}/cafes",
+            json={"name": "TEST No Tags"},
+            headers=user_a["headers"],
+            timeout=TIMEOUT,
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["tags"] == []
+
+    def test_create_cafe_too_many_tags_rejected(self, session, user_a):
+        r = session.post(
+            f"{API}/cafes",
+            json={"name": "TEST Many Tags", "tags": [f"t{i}" for i in range(21)]},
+            headers=user_a["headers"],
+            timeout=TIMEOUT,
+        )
+        assert r.status_code == 422
+
+    def test_update_cafe_tags_replaces_rather_than_merges(self, session, user_a):
+        c = session.post(
+            f"{API}/cafes",
+            json={"name": "TEST Tag Update", "tags": ["Cozy", "Clean"]},
+            headers=user_a["headers"],
+            timeout=TIMEOUT,
+        ).json()
+        r = session.put(
+            f"{API}/cafes/{c['id']}",
+            json={"tags": ["Work-Friendly"]},
+            headers=user_a["headers"],
+            timeout=TIMEOUT,
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["tags"] == ["Work-Friendly"]
+        # Untouched fields survive the partial update.
+        assert r.json()["name"] == "TEST Tag Update"
+
+    def test_update_cafe_tags_can_be_cleared(self, session, user_a):
+        c = session.post(
+            f"{API}/cafes",
+            json={"name": "TEST Tag Clear", "tags": ["Cozy"]},
+            headers=user_a["headers"],
+            timeout=TIMEOUT,
+        ).json()
+        r = session.put(
+            f"{API}/cafes/{c['id']}",
+            json={"tags": []},
+            headers=user_a["headers"],
+            timeout=TIMEOUT,
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["tags"] == []
 
     def test_create_cafe_rating_out_of_range_high(self, session, user_a):
         r = session.post(
@@ -435,3 +493,54 @@ class TestStats:
         assert months.get("2026-01") == 2
         # by_month max 6 entries
         assert len(body["by_month"]) <= 6
+
+
+# ====== Model-level tests (no live server required) ======
+class TestCafeModelBackwardCompat:
+    """
+    The HTTP suite above can never exercise the real backward-compatibility
+    path: every document it creates now *has* a `tags` key. Cafés written
+    before tags shipped do not, and `Cafe(**doc)` is called on them directly
+    by list/get/update. These tests hit the model itself to cover that.
+    """
+
+    @staticmethod
+    def _legacy_doc(**overrides):
+        """A café document as it was persisted before tags existed."""
+        doc = {
+            "id": str(uuid.uuid4()),
+            "user_id": str(uuid.uuid4()),
+            "name": "Legacy Cafe",
+            "photos": [],
+            "location_link": "",
+            "address": "",
+            "notes": "",
+            "rating": 4,
+            "favorite_drink": "Latte",
+            "visited_date": "2025-06-01",
+            "created_at": "2025-06-01T00:00:00+00:00",
+        }
+        doc.update(overrides)
+        return doc
+
+    def test_document_without_tags_deserializes_to_empty_list(self):
+        from server import Cafe
+
+        cafe = Cafe(**self._legacy_doc())
+        assert cafe.tags == []
+
+    def test_default_tags_are_not_shared_between_instances(self):
+        """Pydantic deep-copies mutable defaults; guard against a regression
+        to a plain shared `[]` class attribute."""
+        from server import Cafe
+
+        a = Cafe(**self._legacy_doc())
+        b = Cafe(**self._legacy_doc())
+        a.tags.append("Cozy")
+        assert b.tags == []
+
+    def test_document_with_tags_round_trips(self):
+        from server import Cafe
+
+        cafe = Cafe(**self._legacy_doc(tags=["Cozy", "Clean"]))
+        assert cafe.tags == ["Cozy", "Clean"]

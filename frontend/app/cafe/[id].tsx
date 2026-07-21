@@ -153,6 +153,16 @@ export default function CafeDetail() {
             <Text style={styles.metaDate}>{cafe.visited_date}</Text>
           </View>
 
+          {(cafe.tags ?? []).length > 0 ? (
+            <View style={styles.tagRow} testID="detail-tags">
+              {(cafe.tags ?? []).map((t) => (
+                <View key={t} style={styles.tagPill}>
+                  <Text style={styles.tagPillText}>{t}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           {cafe.favorite_drink ? (
             <Row icon="cafe-outline" label="Favourite drink" value={cafe.favorite_drink} />
           ) : null}
@@ -229,6 +239,14 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   metaDate: { fontFamily: FONTS.sans, color: COLORS.textMuted, fontSize: 13 },
+  tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 16 },
+  tagPill: {
+    backgroundColor: COLORS.surfaceSecondary,
+    paddingHorizontal: 11,
+    paddingVertical: 4,
+    borderRadius: RADII.pill,
+  },
+  tagPillText: { fontFamily: FONTS.sans, fontSize: 11, color: COLORS.textSecondary },
   row: {
     flexDirection: "row",
     gap: 12,

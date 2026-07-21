@@ -82,6 +82,7 @@ export type CafeInput = {
   rating: number;
   favorite_drink: string;
   visited_date: string;
+  tags: string[];
   latitude?: number | null;
   longitude?: number | null;
 };
