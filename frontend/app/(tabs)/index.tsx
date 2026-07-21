@@ -4,7 +4,6 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
-  StyleSheet,
   Image,
   RefreshControl,
   ScrollView,
@@ -16,7 +15,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { api, Cafe } from "@/src/api/client";
-import { COLORS, FONTS, RADII, SHADOWS } from "@/src/theme";
+import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 import { distanceKm, formatDistance } from "@/src/utils/distance";
 
 type SortMode = "recent" | "nearby";
@@ -47,6 +46,7 @@ function cardTags(tags: string[] | undefined, activeTag: string | null): string[
 const TILT = ["-1.5deg", "1.5deg", "1deg", "-1deg"];
 
 function Stars({ value, size = 11 }: { value: number; size?: number }) {
+  const { colors } = useTheme();
   return (
     <View style={{ flexDirection: "row" }}>
       {[1, 2, 3, 4, 5].map((i) => (
@@ -54,7 +54,7 @@ function Stars({ value, size = 11 }: { value: number; size?: number }) {
           key={i}
           name={i <= value ? "star" : "star-outline"}
           size={size}
-          color={COLORS.star}
+          color={colors.star}
         />
       ))}
     </View>
@@ -63,6 +63,8 @@ function Stars({ value, size = 11 }: { value: number; size?: number }) {
 
 export default function Journal() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [cafes, setCafes] = useState<Cafe[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -191,16 +193,16 @@ export default function Journal() {
           onPress={() => router.push("/cafe/new")}
           testID="add-cafe-button"
         >
-          <Ionicons name="add" size={28} color="#fff" />
+          <Ionicons name="add" size={28} color={colors.onPrimary} />
         </TouchableOpacity>
       </View>
 
       <View style={styles.searchWrap}>
-        <Ionicons name="search" size={18} color={COLORS.textMuted} />
+        <Ionicons name="search" size={18} color={colors.textMuted} />
         <TextInput
           style={styles.search}
           placeholder="Search cafes, drinks, places…"
-          placeholderTextColor={COLORS.textMuted}
+          placeholderTextColor={colors.textMuted}
           value={query}
           onChangeText={setQuery}
           testID="search-input"
@@ -216,7 +218,7 @@ export default function Journal() {
           <Ionicons
             name="time-outline"
             size={13}
-            color={sortMode === "recent" ? COLORS.background : COLORS.textSecondary}
+            color={sortMode === "recent" ? colors.onInverseSurface : colors.textSecondary}
           />
           <Text style={[styles.chipText, sortMode === "recent" && styles.chipTextActive]}>
             Recent
@@ -229,12 +231,12 @@ export default function Journal() {
           testID="sort-nearby"
         >
           {locating ? (
-            <ActivityIndicator size="small" color={COLORS.primary} />
+            <ActivityIndicator size="small" color={colors.primary} />
           ) : (
             <Ionicons
               name="navigate-outline"
               size={13}
-              color={sortMode === "nearby" ? COLORS.background : COLORS.textSecondary}
+              color={sortMode === "nearby" ? colors.onInverseSurface : colors.textSecondary}
             />
           )}
           <Text style={[styles.chipText, sortMode === "nearby" && styles.chipTextActive]}>
@@ -282,7 +284,7 @@ export default function Journal() {
       ) : null}
 
       {loading ? (
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
+        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
           data={gridData}
@@ -298,12 +300,12 @@ export default function Journal() {
                 setRefreshing(true);
                 load();
               }}
-              tintColor={COLORS.primary}
+              tintColor={colors.primary}
             />
           }
           ListEmptyComponent={
             <View style={styles.empty} testID="empty-state">
-              <Ionicons name="cafe-outline" size={56} color={COLORS.primaryMuted} />
+              <Ionicons name="cafe-outline" size={56} color={colors.primaryMuted} />
               <Text style={styles.emptyTitle}>No cafés logged yet</Text>
               <Text style={styles.emptyText}>
                 Tap + to add your first café visit.
@@ -329,7 +331,7 @@ export default function Journal() {
                 <Image source={{ uri: item.photos[0] }} style={styles.photo} />
               ) : (
                 <View style={[styles.photo, styles.photoPlaceholder]}>
-                  <Ionicons name="cafe" size={32} color={COLORS.primaryMuted} />
+                  <Ionicons name="cafe" size={32} color={colors.primaryMuted} />
                 </View>
               )}
               <Text style={styles.cardName} numberOfLines={1}>
@@ -353,7 +355,7 @@ export default function Journal() {
                 ))}
                 {item._distanceKm != null ? (
                   <View style={styles.distBadge} testID={`cafe-distance-${item.id}`}>
-                    <Ionicons name="navigate" size={9} color={COLORS.primary} />
+                    <Ionicons name="navigate" size={9} color={colors.primary} />
                     <Text style={styles.distText}>{formatDistance(item._distanceKm)}</Text>
                   </View>
                 ) : null}
@@ -367,8 +369,8 @@ export default function Journal() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+const makeStyles = themedStyles(({ colors, shadows, raisedOutline }: Theme) => ({
+  container: { flex: 1, backgroundColor: colors.background },
   header: {
     paddingHorizontal: 20,
     paddingTop: 8,
@@ -379,7 +381,7 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     fontFamily: FONTS.sans,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     fontSize: 11,
     letterSpacing: 2.5,
     textTransform: "uppercase",
@@ -388,30 +390,30 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: FONTS.serif,
     fontSize: 34,
-    color: COLORS.textPrimary,
+    color: colors.textPrimary,
   },
   fab: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     width: 50,
     height: 50,
     borderRadius: 25,
     alignItems: "center",
     justifyContent: "center",
-    ...SHADOWS.accent,
+    ...shadows.accent,
   },
   searchWrap: {
     marginHorizontal: 20,
     marginBottom: 12,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: RADII.pill,
     paddingHorizontal: 16,
     paddingVertical: 11,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    ...SHADOWS.card,
+    ...shadows.card,
   },
-  search: { flex: 1, fontFamily: FONTS.sans, color: COLORS.textPrimary, fontSize: 14 },
+  search: { flex: 1, fontFamily: FONTS.sans, color: colors.textPrimary, fontSize: 14 },
   sortRow: { flexDirection: "row", gap: 8, paddingHorizontal: 20, marginBottom: 8 },
   tagRow: { flexGrow: 0, marginBottom: 8 },
   tagRowContent: { paddingHorizontal: 20, gap: 8 },
@@ -422,14 +424,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: RADII.pill,
-    backgroundColor: COLORS.surfaceSecondary,
+    backgroundColor: colors.surfaceSecondary,
   },
-  chipActive: { backgroundColor: COLORS.textPrimary },
-  chipText: { fontFamily: FONTS.sansSemi, color: COLORS.textSecondary, fontSize: 11 },
-  chipTextActive: { color: COLORS.background },
+  chipActive: { backgroundColor: colors.inverseSurface },
+  chipText: { fontFamily: FONTS.sansSemi, color: colors.textSecondary, fontSize: 11 },
+  chipTextActive: { color: colors.onInverseSurface },
   locError: {
     fontFamily: FONTS.sans,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     fontSize: 12,
     paddingHorizontal: 20,
     marginBottom: 4,
@@ -438,69 +440,70 @@ const styles = StyleSheet.create({
   gridRow: { gap: 16 },
   polaroid: {
     flex: 1,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: RADII.polaroid,
     paddingHorizontal: 9,
     paddingTop: 9,
     paddingBottom: 12,
     marginBottom: 16,
-    ...SHADOWS.polaroid,
+    ...shadows.polaroid,
+    ...raisedOutline,
   },
   polaroidOffset: { marginTop: 20 },
   photo: {
     width: "100%",
     aspectRatio: 1,
-    backgroundColor: COLORS.surfaceSunken,
+    backgroundColor: colors.surfaceSunken,
   },
   photoPlaceholder: { alignItems: "center", justifyContent: "center" },
   cardName: {
     fontFamily: FONTS.serif,
     fontSize: 14,
-    color: COLORS.textPrimary,
+    color: colors.textPrimary,
     marginTop: 8,
     marginBottom: 2,
   },
   cardMetaRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 6 },
   tag: {
-    backgroundColor: COLORS.surfaceSecondary,
+    backgroundColor: colors.surfaceSecondary,
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: RADII.pill,
     flexShrink: 1,
   },
-  tagText: { fontFamily: FONTS.sansMedium, color: COLORS.textSecondary, fontSize: 9 },
+  tagText: { fontFamily: FONTS.sansMedium, color: colors.textSecondary, fontSize: 9 },
   // Outlined rather than filled so tags stay distinguishable from the drink
   // chip at 9px, where the two would otherwise read as one run of pills.
   tagOutline: {
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     paddingHorizontal: 7,
     paddingVertical: 1,
     borderRadius: RADII.pill,
     flexShrink: 1,
   },
-  tagOutlineText: { fontFamily: FONTS.sansMedium, color: COLORS.textMuted, fontSize: 9 },
+  tagOutlineText: { fontFamily: FONTS.sansMedium, color: colors.textMuted, fontSize: 9 },
   distBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: COLORS.surfaceSecondary,
+    backgroundColor: colors.surfaceSecondary,
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: RADII.pill,
   },
-  distText: { fontFamily: FONTS.sansBold, color: COLORS.primary, fontSize: 9 },
+  distText: { fontFamily: FONTS.sansBold, color: colors.primary, fontSize: 9 },
   empty: { alignItems: "center", paddingTop: 80, gap: 8 },
   emptyTitle: {
     fontFamily: FONTS.serif,
     fontSize: 20,
-    color: COLORS.textPrimary,
+    color: colors.textPrimary,
     marginTop: 12,
   },
   emptyText: {
     fontFamily: FONTS.sans,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     textAlign: "center",
     paddingHorizontal: 40,
   },
-});
+}));

@@ -3,11 +3,12 @@ import { ActivityIndicator, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { CafeForm } from "@/src/components/CafeForm";
 import { api, Cafe, CafeInput } from "@/src/api/client";
-import { COLORS } from "@/src/theme";
+import { useTheme } from "@/src/theme";
 
 export default function EditCafe() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { colors } = useTheme();
   const [cafe, setCafe] = useState<Cafe | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -33,8 +34,8 @@ export default function EditCafe() {
 
   if (!cafe) {
     return (
-      <View style={{ flex: 1, backgroundColor: COLORS.background, justifyContent: "center" }}>
-        <ActivityIndicator color={COLORS.primary} />
+      <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: "center" }}>
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }

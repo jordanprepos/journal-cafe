@@ -1,17 +1,18 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { COLORS, FONTS, RADII, SHADOWS } from "@/src/theme";
+import { FONTS, RADII, useTheme } from "@/src/theme";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const { colors, shadows, raisedOutline } = useTheme();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textMuted,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
         // A detached pill floating over the page rather than a docked bar.
         tabBarStyle: {
           position: "absolute",
@@ -20,7 +21,7 @@ export default function TabsLayout() {
           bottom: Math.max(insets.bottom, 16),
           height: 66,
           borderRadius: RADII.pill,
-          backgroundColor: COLORS.surface,
+          backgroundColor: colors.surface,
           borderTopWidth: 0,
           // The bar is detached from the screen edge, so the default safe-area
           // bottom padding would apply on top of `bottom` and push the contents
@@ -28,7 +29,8 @@ export default function TabsLayout() {
           // icon is the label's box, and too little clips the text.
           paddingTop: 6,
           paddingBottom: 6,
-          ...SHADOWS.floating,
+          ...shadows.floating,
+          ...raisedOutline,
         },
         tabBarLabelStyle: { fontFamily: FONTS.sansSemi, fontSize: 10 },
       }}

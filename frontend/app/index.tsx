@@ -1,10 +1,11 @@
 import { Redirect } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "@/src/context/AuthContext";
-import { COLORS } from "@/src/theme";
+import { useTheme } from "@/src/theme";
 
 export default function Index() {
   const { user, loading } = useAuth();
+  const { colors } = useTheme();
 
   if (loading) {
     return (
@@ -13,11 +14,11 @@ export default function Index() {
           flex: 1,
           justifyContent: "center",
           alignItems: "center",
-          backgroundColor: COLORS.background,
+          backgroundColor: colors.background,
         }}
         testID="splash-loading"
       >
-        <ActivityIndicator color={COLORS.primary} size="large" />
+        <ActivityIndicator color={colors.primary} size="large" />
       </View>
     );
   }

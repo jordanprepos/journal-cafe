@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
   ScrollView,
   Image,
   KeyboardAvoidingView,
@@ -18,7 +17,7 @@ import * as ImagePicker from "expo-image-picker";
 import { CafeInput, Cafe } from "@/src/api/client";
 import { geocodeAddress } from "@/src/utils/geocode";
 import { addTag, hasTag, removeTag, MAX_TAGS, PRESET_TAGS } from "@/src/constants/tags";
-import { COLORS, FONTS, RADII, SHADOWS } from "@/src/theme";
+import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 
 interface Props {
   title: string;
@@ -33,6 +32,8 @@ function todayISO() {
 
 export function CafeForm({ title, initial, onSave, saving }: Props) {
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [name, setName] = useState(initial?.name ?? "");
   const [photos, setPhotos] = useState<string[]>(initial?.photos ?? []);
   const [locationLink, setLocationLink] = useState(initial?.location_link ?? "");
@@ -145,7 +146,7 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
           <Text style={styles.headerTitle}>{title}</Text>
           <TouchableOpacity onPress={submit} disabled={saving} testID="form-save-button">
             {saving ? (
-              <ActivityIndicator size="small" color={COLORS.primary} />
+              <ActivityIndicator size="small" color={colors.primary} />
             ) : (
               <Text style={styles.save}>Save</Text>
             )}
@@ -168,7 +169,7 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
               onPress={pickPhoto}
               testID="add-photo-button"
             >
-              <Ionicons name="camera-outline" size={26} color={COLORS.primary} />
+              <Ionicons name="camera-outline" size={26} color={colors.primary} />
               <Text style={styles.dropzoneTitle}>Add photos</Text>
               <Text style={styles.dropzoneHint}>or paste from camera roll</Text>
             </TouchableOpacity>
@@ -187,7 +188,10 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
                       onPress={() => removePhoto(idx)}
                       testID={`remove-photo-${idx}`}
                     >
-                      <Ionicons name="close" size={14} color="#fff" />
+                      {/* onOverlay, not onPrimary: this sits on the scheme-
+                          invariant overlay above a user photo, where dark
+                          mode's near-black onPrimary would vanish. */}
+                      <Ionicons name="close" size={14} color={colors.onOverlay} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -196,7 +200,7 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
                   style={[styles.thumb, styles.thumbAdd]}
                   testID="add-photo-button"
                 >
-                  <Ionicons name="camera-outline" size={24} color={COLORS.primary} />
+                  <Ionicons name="camera-outline" size={24} color={colors.primary} />
                   <Text style={styles.thumbAddText}>Add</Text>
                 </TouchableOpacity>
               </View>
@@ -210,7 +214,7 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
                 value={name}
                 onChangeText={setName}
                 placeholder="e.g. Blue Bottle Coffee"
-                placeholderTextColor={COLORS.textMuted}
+                placeholderTextColor={colors.textMuted}
                 testID="form-name-input"
               />
             </Field>
@@ -220,7 +224,7 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
                 value={locationLink}
                 onChangeText={setLocationLink}
                 placeholder="Paste Maps link"
-                placeholderTextColor={COLORS.textMuted}
+                placeholderTextColor={colors.textMuted}
                 autoCapitalize="none"
                 testID="form-location-input"
               />
@@ -231,7 +235,7 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
                 value={address}
                 onChangeText={setAddress}
                 placeholder="e.g. Brooklyn, NY"
-                placeholderTextColor={COLORS.textMuted}
+                placeholderTextColor={colors.textMuted}
                 testID="form-address-input"
               />
             </Field>
@@ -242,7 +246,7 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
                   value={visitedDate}
                   onChangeText={setVisitedDate}
                   placeholder="YYYY-MM-DD"
-                  placeholderTextColor={COLORS.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   testID="form-date-input"
                 />
               </Field>
@@ -252,7 +256,7 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
                   value={favoriteDrink}
                   onChangeText={setFavoriteDrink}
                   placeholder="Oat latte"
-                  placeholderTextColor={COLORS.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   testID="form-drink-input"
                 />
               </Field>
@@ -271,7 +275,7 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
                     <Ionicons
                       name={i <= rating ? "star" : "star-outline"}
                       size={30}
-                      color={COLORS.star}
+                      color={colors.star}
                     />
                   </TouchableOpacity>
                 ))}
@@ -292,7 +296,7 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
                       testID={`form-tag-${t.toLowerCase().replace(/\s+/g, "-")}`}
                     >
                       <Text style={[styles.tagChipText, on && styles.tagChipTextOn]}>{t}</Text>
-                      {on ? <Ionicons name="checkmark" size={11} color="#fff" /> : null}
+                      {on ? <Ionicons name="checkmark" size={11} color={colors.onInverseSurface} /> : null}
                     </TouchableOpacity>
                   );
                 })}
@@ -305,19 +309,19 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
                     testID={`form-tag-custom-${t.toLowerCase().replace(/\s+/g, "-")}`}
                   >
                     <Text style={[styles.tagChipText, styles.tagChipTextOn]}>{t}</Text>
-                    <Ionicons name="close" size={11} color="#fff" />
+                    <Ionicons name="close" size={11} color={colors.onInverseSurface} />
                   </TouchableOpacity>
                 ))}
 
                 {tags.length < MAX_TAGS ? (
                   <View style={styles.tagInputChip}>
-                    <Ionicons name="add" size={13} color={COLORS.primary} />
+                    <Ionicons name="add" size={13} color={colors.primary} />
                     <TextInput
                       style={styles.tagInput}
                       value={customTag}
                       onChangeText={setCustomTag}
                       placeholder="new tag"
-                      placeholderTextColor={COLORS.textMuted}
+                      placeholderTextColor={colors.textMuted}
                       // Keeps focus so tapping a preset chip straight after
                       // typing registers as a tap rather than a dismiss.
                       blurOnSubmit={false}
@@ -339,7 +343,7 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
                 value={notes}
                 onChangeText={setNotes}
                 placeholder="Vibe, music, who you were with…"
-                placeholderTextColor={COLORS.textMuted}
+                placeholderTextColor={colors.textMuted}
                 multiline
                 textAlignVertical="top"
                 testID="form-notes-input"
@@ -365,6 +369,7 @@ function Field({
   style?: object;
   last?: boolean;
 }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={[styles.field, !last && styles.fieldDivider, style]}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -374,8 +379,8 @@ function Field({
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+const makeStyles = themedStyles(({ colors, shadows, raisedOutline }: Theme) => ({
+  container: { flex: 1, backgroundColor: colors.background },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -384,33 +389,33 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginBottom: 4,
   },
-  cancel: { fontFamily: FONTS.sans, fontSize: 14, color: COLORS.textMuted },
+  cancel: { fontFamily: FONTS.sans, fontSize: 14, color: colors.textMuted },
   headerTitle: {
     fontFamily: FONTS.serif,
     fontSize: 19,
-    color: COLORS.textPrimary,
+    color: colors.textPrimary,
   },
-  save: { fontFamily: FONTS.sansBold, fontSize: 14, color: COLORS.primary },
+  save: { fontFamily: FONTS.sansBold, fontSize: 14, color: colors.primary },
   dropzone: {
     height: 150,
     borderRadius: RADII.card,
     borderWidth: 1.5,
     borderStyle: "dashed",
-    borderColor: COLORS.borderDashed,
-    backgroundColor: COLORS.inputSurface,
+    borderColor: colors.borderDashed,
+    backgroundColor: colors.inputSurface,
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
     marginBottom: 16,
   },
-  dropzoneTitle: { fontFamily: FONTS.sansSemi, fontSize: 13, color: COLORS.primary },
-  dropzoneHint: { fontFamily: FONTS.sans, fontSize: 11, color: COLORS.textMuted },
+  dropzoneTitle: { fontFamily: FONTS.sansSemi, fontSize: 13, color: colors.primary },
+  dropzoneHint: { fontFamily: FONTS.sans, fontSize: 11, color: colors.textMuted },
   thumbStrip: { marginBottom: 16 },
   thumb: {
     width: 96,
     height: 96,
     borderRadius: RADII.card,
-    backgroundColor: COLORS.surfaceSunken,
+    backgroundColor: colors.surfaceSunken,
     overflow: "hidden",
   },
   thumbImg: { width: "100%", height: "100%" },
@@ -418,7 +423,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 6,
     right: 6,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: colors.overlay,
     width: 22,
     height: 22,
     borderRadius: 11,
@@ -430,54 +435,55 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1.5,
     borderStyle: "dashed",
-    borderColor: COLORS.borderDashed,
-    backgroundColor: COLORS.inputSurface,
+    borderColor: colors.borderDashed,
+    backgroundColor: colors.inputSurface,
     gap: 4,
   },
-  thumbAddText: { fontFamily: FONTS.sansSemi, color: COLORS.primary, fontSize: 12 },
+  thumbAddText: { fontFamily: FONTS.sansSemi, color: colors.primary, fontSize: 12 },
   card: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: RADII.card,
     overflow: "hidden",
     marginBottom: 14,
-    ...SHADOWS.card,
+    ...shadows.card,
+    ...raisedOutline,
   },
   field: { paddingHorizontal: 16, paddingVertical: 12 },
-  fieldDivider: { borderBottomWidth: 1, borderBottomColor: COLORS.borderSubtle },
+  fieldDivider: { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
   fieldLabel: {
     fontFamily: FONTS.sans,
     fontSize: 10,
     letterSpacing: 1.5,
     textTransform: "uppercase",
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
-  fieldHint: { fontFamily: FONTS.sans, fontSize: 11, color: COLORS.textMuted, marginTop: 4 },
+  fieldHint: { fontFamily: FONTS.sans, fontSize: 11, color: colors.textMuted, marginTop: 4 },
   // Inputs sit flush inside their row — the card supplies the chrome.
   input: {
     fontFamily: FONTS.sans,
     fontSize: 15,
-    color: COLORS.textPrimary,
+    color: colors.textPrimary,
     paddingTop: 3,
     paddingBottom: 0,
   },
   multiline: { minHeight: 96, paddingTop: 6 },
   splitRow: { flexDirection: "row" },
   splitCell: { flex: 1 },
-  splitCellLeft: { flex: 1, borderRightWidth: 1, borderRightColor: COLORS.borderSubtle },
+  splitCellLeft: { flex: 1, borderRightWidth: 1, borderRightColor: colors.borderSubtle },
   starsRow: { flexDirection: "row", gap: 6, marginTop: 6 },
   tagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   tagChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: COLORS.surfaceSecondary,
+    backgroundColor: colors.surfaceSecondary,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: RADII.pill,
   },
-  tagChipOn: { backgroundColor: COLORS.textPrimary },
-  tagChipText: { fontFamily: FONTS.sansMedium, fontSize: 11, color: COLORS.textSecondary },
-  tagChipTextOn: { color: "#fff" },
+  tagChipOn: { backgroundColor: colors.inverseSurface },
+  tagChipText: { fontFamily: FONTS.sansMedium, fontSize: 11, color: colors.textSecondary },
+  tagChipTextOn: { color: colors.onInverseSurface },
   tagInputChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -487,21 +493,21 @@ const styles = StyleSheet.create({
     borderRadius: RADII.pill,
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: COLORS.borderDashed,
+    borderColor: colors.borderDashed,
   },
   tagInput: {
     fontFamily: FONTS.sansMedium,
     fontSize: 11,
-    color: COLORS.textPrimary,
+    color: colors.textPrimary,
     minWidth: 62,
     padding: 0,
   },
   error: {
     fontFamily: FONTS.sans,
-    color: COLORS.error,
-    backgroundColor: "#FBEAEA",
+    color: colors.error,
+    backgroundColor: colors.errorSurface,
     padding: 12,
     borderRadius: 12,
     marginBottom: 14,
   },
-});
+}));

@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -13,11 +12,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { COLORS, FONTS, RADII } from "@/src/theme";
+import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 
 export default function Register() {
   const router = useRouter();
   const { register } = useAuth();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -64,7 +65,7 @@ export default function Register() {
           <TextInput
             style={styles.input}
             placeholder="Your name"
-            placeholderTextColor={COLORS.textSecondary}
+            placeholderTextColor={colors.textMuted}
             value={name}
             onChangeText={setName}
             testID="register-name-input"
@@ -72,7 +73,7 @@ export default function Register() {
           <TextInput
             style={styles.input}
             placeholder="Email"
-            placeholderTextColor={COLORS.textSecondary}
+            placeholderTextColor={colors.textMuted}
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
@@ -82,7 +83,7 @@ export default function Register() {
           <TextInput
             style={styles.input}
             placeholder="Password (6+ chars)"
-            placeholderTextColor={COLORS.textSecondary}
+            placeholderTextColor={colors.textMuted}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -96,7 +97,7 @@ export default function Register() {
             testID="register-submit-button"
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.onPrimary} />
             ) : (
               <Text style={styles.primaryBtnText}>Create account</Text>
             )}
@@ -117,48 +118,48 @@ export default function Register() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+const makeStyles = themedStyles(({ colors }: Theme) => ({
+  container: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: 24, paddingTop: 60 },
   brand: {
     fontSize: 34,
     fontFamily: FONTS.serif,
-    color: COLORS.textPrimary,
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   subtitle: {
     fontFamily: FONTS.sans,
     fontSize: 15,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginBottom: 40,
   },
   input: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: RADII.pill,
     paddingHorizontal: 18,
     paddingVertical: 15,
     fontFamily: FONTS.sans,
     fontSize: 15,
-    color: COLORS.textPrimary,
+    color: colors.textPrimary,
     marginBottom: 12,
   },
   primaryBtn: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     borderRadius: RADII.pill,
     paddingVertical: 16,
     alignItems: "center",
     marginTop: 12,
   },
-  primaryBtnText: { fontFamily: FONTS.sansSemi, color: "#fff", fontSize: 15 },
+  primaryBtnText: { fontFamily: FONTS.sansSemi, color: colors.onPrimary, fontSize: 15 },
   linkBtn: { marginTop: 20, alignItems: "center" },
-  linkText: { fontFamily: FONTS.sans, color: COLORS.textSecondary, fontSize: 14 },
-  linkAccent: { fontFamily: FONTS.sansSemi, color: COLORS.primary },
+  linkText: { fontFamily: FONTS.sans, color: colors.textSecondary, fontSize: 14 },
+  linkAccent: { fontFamily: FONTS.sansSemi, color: colors.primary },
   error: {
     fontFamily: FONTS.sans,
-    color: COLORS.error,
+    color: colors.error,
     marginBottom: 12,
-    backgroundColor: "#FBEAEA",
+    backgroundColor: colors.errorSurface,
     padding: 12,
     borderRadius: 12,
   },
-});
+}));

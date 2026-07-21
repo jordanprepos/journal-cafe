@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<!--
+  Web HTML shell.
+
+  This file — not app/+html.tsx — is what Expo actually uses, because app.json
+  sets web.output to "single". `+html.tsx` only applies to static rendering
+  (output: "static"); under "single" it is ignored in both dev and export, so
+  the theme boot code below cannot live there. Expo copies this file from
+  public/ and injects the bundle <script> into it.
+
+  The <script> runs before the bundle. It exists to stop a flash of the wrong
+  scheme: prefers-color-scheme alone can't see an in-app override, and
+  AsyncStorage on web is IndexedDB-backed and asynchronous, so it can't be read
+  this early. src/theme/preference-boot.web.ts keeps the mirrored key in step.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>Café Journal</title>
+    <style id="expo-reset">
+      html, body { height: 100%; }
+      body { overflow: hidden; }
+      #root { display: flex; height: 100%; flex: 1; }
+    </style>
+    <style id="theme-boot">
+      :root { color-scheme: light dark; }
+      body { background-color: #FBF6EC; }
+      @media (prefers-color-scheme: dark) { body { background-color: #1F1A17; } }
+      html[data-theme="light"] body { background-color: #FBF6EC; }
+      html[data-theme="dark"] body { background-color: #1F1A17; }
+    </style>
+    <script>
+      try {
+        var m = localStorage.getItem("cafe_journal_theme_boot");
+        if (m === "light" || m === "dark") document.documentElement.dataset.theme = m;
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
