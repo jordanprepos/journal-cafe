@@ -88,6 +88,10 @@ class CafeCreate(BaseModel):
     rating: int = Field(default=0, ge=0, le=5)
     favorite_drink: str = ""
     visited_date: str = ""  # ISO date string
+    # Free-form labels. Normalised (trimmed, case-insensitively deduped) by the
+    # client before it gets here; the cap just stops a runaway client writing an
+    # unbounded document.
+    tags: List[str] = Field(default=[], max_length=20)
     # Geocoded from `address` on the client; powers "Nearby" sorting.
     latitude: Optional[float] = Field(default=None, ge=-90, le=90)
     longitude: Optional[float] = Field(default=None, ge=-180, le=180)
@@ -102,6 +106,7 @@ class CafeUpdate(BaseModel):
     rating: Optional[int] = Field(default=None, ge=0, le=5)
     favorite_drink: Optional[str] = None
     visited_date: Optional[str] = None
+    tags: Optional[List[str]] = Field(default=None, max_length=20)
     latitude: Optional[float] = Field(default=None, ge=-90, le=90)
     longitude: Optional[float] = Field(default=None, ge=-180, le=180)
 
@@ -118,7 +123,8 @@ class Cafe(BaseModel):
     favorite_drink: str
     visited_date: str
     created_at: str
-    # Optional so cafés logged before geo support still deserialize.
+    # Defaulted so cafés logged before tag/geo support still deserialize.
+    tags: List[str] = []
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
@@ -226,6 +232,7 @@ async def create_cafe(data: CafeCreate, user=Depends(get_current_user)):
         "rating": data.rating,
         "favorite_drink": data.favorite_drink,
         "visited_date": data.visited_date or now[:10],
+        "tags": data.tags,
         "latitude": data.latitude,
         "longitude": data.longitude,
         "created_at": now,

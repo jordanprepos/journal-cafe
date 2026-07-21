@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { CafeInput, Cafe } from "@/src/api/client";
 import { geocodeAddress } from "@/src/utils/geocode";
+import { addTag, hasTag, removeTag, MAX_TAGS, PRESET_TAGS } from "@/src/constants/tags";
 import { COLORS, FONTS, RADII, SHADOWS } from "@/src/theme";
 
 interface Props {
@@ -40,7 +41,22 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
   const [rating, setRating] = useState(initial?.rating ?? 0);
   const [favoriteDrink, setFavoriteDrink] = useState(initial?.favorite_drink ?? "");
   const [visitedDate, setVisitedDate] = useState(initial?.visited_date || todayISO());
+  const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
+  const [customTag, setCustomTag] = useState("");
   const [error, setError] = useState("");
+
+  function toggleTag(tag: string) {
+    setTags((t) => (hasTag(t, tag) ? removeTag(t, tag) : addTag(t, tag)));
+  }
+
+  function commitCustomTag() {
+    setTags((t) => addTag(t, customTag));
+    setCustomTag("");
+  }
+
+  // Tags the user typed themselves, i.e. everything not on the preset list.
+  // Rendered after the presets, always in the selected state.
+  const customTags = tags.filter((t) => !PRESET_TAGS.some((p) => p.toLowerCase() === t.toLowerCase()));
 
   async function pickPhoto() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -105,6 +121,9 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
         rating,
         favorite_drink: favoriteDrink.trim(),
         visited_date: visitedDate.trim() || todayISO(),
+        // Fold in anything still sitting in the custom-tag box so a half-typed
+        // tag isn't silently dropped when the user taps Save directly.
+        tags: addTag(tags, customTag),
         latitude,
         longitude,
       });
@@ -261,6 +280,59 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
           </View>
 
           <View style={styles.card}>
+            <Field label="Tags" last>
+              <View style={styles.tagWrap}>
+                {PRESET_TAGS.map((t) => {
+                  const on = hasTag(tags, t);
+                  return (
+                    <TouchableOpacity
+                      key={t}
+                      style={[styles.tagChip, on && styles.tagChipOn]}
+                      onPress={() => toggleTag(t)}
+                      testID={`form-tag-${t.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      <Text style={[styles.tagChipText, on && styles.tagChipTextOn]}>{t}</Text>
+                      {on ? <Ionicons name="checkmark" size={11} color="#fff" /> : null}
+                    </TouchableOpacity>
+                  );
+                })}
+
+                {customTags.map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.tagChip, styles.tagChipOn]}
+                    onPress={() => toggleTag(t)}
+                    testID={`form-tag-custom-${t.toLowerCase().replace(/\s+/g, "-")}`}
+                  >
+                    <Text style={[styles.tagChipText, styles.tagChipTextOn]}>{t}</Text>
+                    <Ionicons name="close" size={11} color="#fff" />
+                  </TouchableOpacity>
+                ))}
+
+                {tags.length < MAX_TAGS ? (
+                  <View style={styles.tagInputChip}>
+                    <Ionicons name="add" size={13} color={COLORS.primary} />
+                    <TextInput
+                      style={styles.tagInput}
+                      value={customTag}
+                      onChangeText={setCustomTag}
+                      placeholder="new tag"
+                      placeholderTextColor={COLORS.textMuted}
+                      // Keeps focus so tapping a preset chip straight after
+                      // typing registers as a tap rather than a dismiss.
+                      blurOnSubmit={false}
+                      returnKeyType="done"
+                      onSubmitEditing={commitCustomTag}
+                      onBlur={commitCustomTag}
+                      testID="form-custom-tag-input"
+                    />
+                  </View>
+                ) : null}
+              </View>
+            </Field>
+          </View>
+
+          <View style={styles.card}>
             <Field label="Notes" last>
               <TextInput
                 style={[styles.input, styles.multiline]}
@@ -393,6 +465,37 @@ const styles = StyleSheet.create({
   splitCell: { flex: 1 },
   splitCellLeft: { flex: 1, borderRightWidth: 1, borderRightColor: COLORS.borderSubtle },
   starsRow: { flexDirection: "row", gap: 6, marginTop: 6 },
+  tagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+  tagChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: COLORS.surfaceSecondary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADII.pill,
+  },
+  tagChipOn: { backgroundColor: COLORS.textPrimary },
+  tagChipText: { fontFamily: FONTS.sansMedium, fontSize: 11, color: COLORS.textSecondary },
+  tagChipTextOn: { color: "#fff" },
+  tagInputChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADII.pill,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: COLORS.borderDashed,
+  },
+  tagInput: {
+    fontFamily: FONTS.sansMedium,
+    fontSize: 11,
+    color: COLORS.textPrimary,
+    minWidth: 62,
+    padding: 0,
+  },
   error: {
     fontFamily: FONTS.sans,
     color: COLORS.error,

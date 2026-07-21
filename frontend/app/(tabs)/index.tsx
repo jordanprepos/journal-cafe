@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Image,
   RefreshControl,
+  ScrollView,
   TextInput,
   ActivityIndicator,
 } from "react-native";
@@ -26,6 +27,20 @@ type GridItem = CafeWithDistance | { id: string; _spacer: true };
 
 const isSpacer = (item: GridItem): item is { id: string; _spacer: true } =>
   "_spacer" in item;
+
+/**
+ * Tags to show on a polaroid. Capped at two so a heavily-tagged café doesn't
+ * grow its tile out of the grid; the active filter is sorted first so the
+ * reason a card matched is always the one you can see.
+ */
+const CARD_TAG_LIMIT = 2;
+function cardTags(tags: string[] | undefined, activeTag: string | null): string[] {
+  const list = tags ?? [];
+  if (!activeTag) return list.slice(0, CARD_TAG_LIMIT);
+  const matched = list.filter((t) => t.toLowerCase() === activeTag.toLowerCase());
+  const rest = list.filter((t) => t.toLowerCase() !== activeTag.toLowerCase());
+  return [...matched, ...rest].slice(0, CARD_TAG_LIMIT);
+}
 
 // Scatter angles for the polaroid tiles, cycled by index so the grid reads as
 // a hand-laid page rather than a uniform grid.
@@ -56,6 +71,7 @@ export default function Journal() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState("");
+  const [activeTag, setActiveTag] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -101,14 +117,39 @@ export default function Journal() {
     }
   }
 
+  // Only offer filters for tags that are actually in use — a chip for a tag
+  // nobody has applied is dead UI. Keeps first-seen casing.
+  const availableTags = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const c of cafes) {
+      for (const t of c.tags ?? []) {
+        if (!seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
+      }
+    }
+    return [...seen.values()].sort((a, b) => a.localeCompare(b));
+  }, [cafes]);
+
+  // Deleting the last café carrying the active tag would otherwise leave the
+  // grid permanently empty with no chip left to tap to undo it.
+  useEffect(() => {
+    if (activeTag && !availableTags.some((t) => t.toLowerCase() === activeTag.toLowerCase())) {
+      setActiveTag(null);
+    }
+  }, [activeTag, availableTags]);
+
   const visible: CafeWithDistance[] = useMemo(() => {
     const q = query.trim().toLowerCase();
     const matched = cafes.filter((c) => {
+      const tags = c.tags ?? [];
+      if (activeTag && !tags.some((t) => t.toLowerCase() === activeTag.toLowerCase())) {
+        return false;
+      }
       if (!q) return true;
       return (
         c.name.toLowerCase().includes(q) ||
         c.favorite_drink.toLowerCase().includes(q) ||
-        c.address.toLowerCase().includes(q)
+        c.address.toLowerCase().includes(q) ||
+        tags.some((t) => t.toLowerCase().includes(q))
       );
     });
 
@@ -128,7 +169,7 @@ export default function Journal() {
       if (b._distanceKm == null) return -1;
       return a._distanceKm - b._distanceKm;
     });
-  }, [cafes, query, sortMode, coords]);
+  }, [cafes, query, activeTag, sortMode, coords]);
 
   const gridData: GridItem[] = useMemo(
     () =>
@@ -202,6 +243,38 @@ export default function Journal() {
         </TouchableOpacity>
       </View>
 
+      {availableTags.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tagRow}
+          contentContainerStyle={styles.tagRowContent}
+        >
+          <TouchableOpacity
+            style={[styles.chip, activeTag === null && styles.chipActive]}
+            onPress={() => setActiveTag(null)}
+            testID="tag-filter-all"
+          >
+            <Text style={[styles.chipText, activeTag === null && styles.chipTextActive]}>
+              All
+            </Text>
+          </TouchableOpacity>
+          {availableTags.map((t) => {
+            const on = activeTag?.toLowerCase() === t.toLowerCase();
+            return (
+              <TouchableOpacity
+                key={t}
+                style={[styles.chip, on && styles.chipActive]}
+                onPress={() => setActiveTag(on ? null : t)}
+                testID={`tag-filter-${t.toLowerCase().replace(/\s+/g, "-")}`}
+              >
+                <Text style={[styles.chipText, on && styles.chipTextActive]}>{t}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      ) : null}
+
       {locError ? (
         <Text style={styles.locError} testID="location-error">
           {locError}
@@ -271,6 +344,13 @@ export default function Journal() {
                     </Text>
                   </View>
                 ) : null}
+                {cardTags(item.tags, activeTag).map((t) => (
+                  <View key={t} style={styles.tagOutline}>
+                    <Text style={styles.tagOutlineText} numberOfLines={1}>
+                      {t}
+                    </Text>
+                  </View>
+                ))}
                 {item._distanceKm != null ? (
                   <View style={styles.distBadge} testID={`cafe-distance-${item.id}`}>
                     <Ionicons name="navigate" size={9} color={COLORS.primary} />
@@ -333,6 +413,8 @@ const styles = StyleSheet.create({
   },
   search: { flex: 1, fontFamily: FONTS.sans, color: COLORS.textPrimary, fontSize: 14 },
   sortRow: { flexDirection: "row", gap: 8, paddingHorizontal: 20, marginBottom: 8 },
+  tagRow: { flexGrow: 0, marginBottom: 8 },
+  tagRowContent: { paddingHorizontal: 20, gap: 8 },
   chip: {
     flexDirection: "row",
     alignItems: "center",
@@ -387,6 +469,17 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   tagText: { fontFamily: FONTS.sansMedium, color: COLORS.textSecondary, fontSize: 9 },
+  // Outlined rather than filled so tags stay distinguishable from the drink
+  // chip at 9px, where the two would otherwise read as one run of pills.
+  tagOutline: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 7,
+    paddingVertical: 1,
+    borderRadius: RADII.pill,
+    flexShrink: 1,
+  },
+  tagOutlineText: { fontFamily: FONTS.sansMedium, color: COLORS.textMuted, fontSize: 9 },
   distBadge: {
     flexDirection: "row",
     alignItems: "center",
