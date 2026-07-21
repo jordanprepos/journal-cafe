@@ -15,20 +15,30 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { api, Cafe } from "@/src/api/client";
-import { COLORS, FONTS } from "@/src/theme";
+import { COLORS, FONTS, RADII, SHADOWS } from "@/src/theme";
 import { distanceKm, formatDistance } from "@/src/utils/distance";
 
 type SortMode = "recent" | "nearby";
 type CafeWithDistance = Cafe & { _distanceKm?: number };
+// Padding entry for an odd-length grid — without it the trailing polaroid
+// flexes to the full row width instead of staying a column wide.
+type GridItem = CafeWithDistance | { id: string; _spacer: true };
 
-function Stars({ value }: { value: number }) {
+const isSpacer = (item: GridItem): item is { id: string; _spacer: true } =>
+  "_spacer" in item;
+
+// Scatter angles for the polaroid tiles, cycled by index so the grid reads as
+// a hand-laid page rather than a uniform grid.
+const TILT = ["-1.5deg", "1.5deg", "1deg", "-1deg"];
+
+function Stars({ value, size = 11 }: { value: number; size?: number }) {
   return (
     <View style={{ flexDirection: "row" }}>
       {[1, 2, 3, 4, 5].map((i) => (
         <Ionicons
           key={i}
           name={i <= value ? "star" : "star-outline"}
-          size={14}
+          size={size}
           color={COLORS.star}
         />
       ))}
@@ -120,6 +130,14 @@ export default function Journal() {
     });
   }, [cafes, query, sortMode, coords]);
 
+  const gridData: GridItem[] = useMemo(
+    () =>
+      visible.length % 2 === 1
+        ? [...visible, { id: "__spacer__", _spacer: true as const }]
+        : visible,
+    [visible]
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.header}>
@@ -137,11 +155,11 @@ export default function Journal() {
       </View>
 
       <View style={styles.searchWrap}>
-        <Ionicons name="search" size={18} color={COLORS.textSecondary} />
+        <Ionicons name="search" size={18} color={COLORS.textMuted} />
         <TextInput
           style={styles.search}
           placeholder="Search cafes, drinks, places…"
-          placeholderTextColor={COLORS.textSecondary}
+          placeholderTextColor={COLORS.textMuted}
           value={query}
           onChangeText={setQuery}
           testID="search-input"
@@ -150,21 +168,21 @@ export default function Journal() {
 
       <View style={styles.sortRow}>
         <TouchableOpacity
-          style={[styles.sortPill, sortMode === "recent" && styles.sortPillActive]}
+          style={[styles.chip, sortMode === "recent" && styles.chipActive]}
           onPress={() => setSortMode("recent")}
           testID="sort-recent"
         >
           <Ionicons
             name="time-outline"
-            size={15}
-            color={sortMode === "recent" ? "#fff" : COLORS.textSecondary}
+            size={13}
+            color={sortMode === "recent" ? COLORS.background : COLORS.textSecondary}
           />
-          <Text style={[styles.sortText, sortMode === "recent" && styles.sortTextActive]}>
+          <Text style={[styles.chipText, sortMode === "recent" && styles.chipTextActive]}>
             Recent
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.sortPill, sortMode === "nearby" && styles.sortPillActive]}
+          style={[styles.chip, sortMode === "nearby" && styles.chipActive]}
           onPress={enableNearby}
           disabled={locating}
           testID="sort-nearby"
@@ -174,11 +192,11 @@ export default function Journal() {
           ) : (
             <Ionicons
               name="navigate-outline"
-              size={15}
-              color={sortMode === "nearby" ? "#fff" : COLORS.textSecondary}
+              size={13}
+              color={sortMode === "nearby" ? COLORS.background : COLORS.textSecondary}
             />
           )}
-          <Text style={[styles.sortText, sortMode === "nearby" && styles.sortTextActive]}>
+          <Text style={[styles.chipText, sortMode === "nearby" && styles.chipTextActive]}>
             Nearby
           </Text>
         </TouchableOpacity>
@@ -194,9 +212,12 @@ export default function Journal() {
         <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
-          data={visible}
+          data={gridData}
+          key="polaroid-grid"
+          numColumns={2}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+          columnWrapperStyle={styles.gridRow}
+          contentContainerStyle={styles.grid}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -216,43 +237,50 @@ export default function Journal() {
               </Text>
             </View>
           }
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) =>
+            isSpacer(item) ? (
+              <View style={{ flex: 1 }} />
+            ) : (
             <TouchableOpacity
-              style={styles.card}
+              activeOpacity={0.85}
+              style={[
+                styles.polaroid,
+                { transform: [{ rotate: TILT[index % TILT.length] }] },
+                // Offset the right-hand column so the two columns interleave.
+                index % 2 === 1 && styles.polaroidOffset,
+              ]}
               onPress={() => router.push(`/cafe/${item.id}`)}
               testID={`cafe-card-${item.id}`}
             >
               {item.photos.length > 0 ? (
-                <Image source={{ uri: item.photos[0] }} style={styles.cardImage} />
+                <Image source={{ uri: item.photos[0] }} style={styles.photo} />
               ) : (
-                <View style={[styles.cardImage, styles.imgPlaceholder]}>
-                  <Ionicons name="cafe" size={40} color={COLORS.primaryMuted} />
+                <View style={[styles.photo, styles.photoPlaceholder]}>
+                  <Ionicons name="cafe" size={32} color={COLORS.primaryMuted} />
                 </View>
               )}
-              <View style={styles.cardBody}>
-                <Text style={styles.cardName} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <Stars value={item.rating} />
-                  <Text style={styles.cardMeta}>
-                    {item.visited_date || item.created_at.slice(0, 10)}
-                  </Text>
-                  {item._distanceKm != null ? (
-                    <View style={styles.distBadge} testID={`cafe-distance-${item.id}`}>
-                      <Ionicons name="navigate" size={11} color={COLORS.primary} />
-                      <Text style={styles.distText}>{formatDistance(item._distanceKm)}</Text>
-                    </View>
-                  ) : null}
-                </View>
+              <Text style={styles.cardName} numberOfLines={1}>
+                {item.name}
+              </Text>
+              <Stars value={item.rating} />
+              <View style={styles.cardMetaRow}>
                 {item.favorite_drink ? (
-                  <Text style={styles.cardDrink} numberOfLines={1}>
-                    ☕ {item.favorite_drink}
-                  </Text>
+                  <View style={styles.tag}>
+                    <Text style={styles.tagText} numberOfLines={1}>
+                      {item.favorite_drink}
+                    </Text>
+                  </View>
+                ) : null}
+                {item._distanceKm != null ? (
+                  <View style={styles.distBadge} testID={`cafe-distance-${item.id}`}>
+                    <Ionicons name="navigate" size={9} color={COLORS.primary} />
+                    <Text style={styles.distText}>{formatDistance(item._distanceKm)}</Text>
+                  </View>
                 ) : null}
               </View>
             </TouchableOpacity>
-          )}
+            )
+          }
         />
       )}
     </SafeAreaView>
@@ -264,67 +292,101 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
     paddingTop: 8,
-    paddingBottom: 12,
+    paddingBottom: 14,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
   },
   eyebrow: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    letterSpacing: 2,
+    fontFamily: FONTS.sans,
+    color: COLORS.textMuted,
+    fontSize: 11,
+    letterSpacing: 2.5,
     textTransform: "uppercase",
-    marginBottom: 4,
+    marginBottom: 5,
   },
   title: {
     fontFamily: FONTS.serif,
-    fontSize: 36,
+    fontSize: 34,
     color: COLORS.textPrimary,
-    fontWeight: "600",
   },
   fab: {
     backgroundColor: COLORS.primary,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     alignItems: "center",
     justifyContent: "center",
+    ...SHADOWS.accent,
   },
   searchWrap: {
     marginHorizontal: 20,
-    marginBottom: 8,
+    marginBottom: 12,
     backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderRadius: RADII.pill,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    ...SHADOWS.card,
   },
-  search: { flex: 1, color: COLORS.textPrimary, fontSize: 15 },
+  search: { flex: 1, fontFamily: FONTS.sans, color: COLORS.textPrimary, fontSize: 14 },
   sortRow: { flexDirection: "row", gap: 8, paddingHorizontal: 20, marginBottom: 8 },
-  sortPill: {
+  chip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    borderRadius: RADII.pill,
+    backgroundColor: COLORS.surfaceSecondary,
   },
-  sortPillActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  sortText: { color: COLORS.textSecondary, fontSize: 13, fontWeight: "600" },
-  sortTextActive: { color: "#fff" },
+  chipActive: { backgroundColor: COLORS.textPrimary },
+  chipText: { fontFamily: FONTS.sansSemi, color: COLORS.textSecondary, fontSize: 11 },
+  chipTextActive: { color: COLORS.background },
   locError: {
-    color: COLORS.textSecondary,
+    fontFamily: FONTS.sans,
+    color: COLORS.textMuted,
     fontSize: 12,
     paddingHorizontal: 20,
     marginBottom: 4,
   },
+  grid: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 120 },
+  gridRow: { gap: 16 },
+  polaroid: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADII.polaroid,
+    paddingHorizontal: 9,
+    paddingTop: 9,
+    paddingBottom: 12,
+    marginBottom: 16,
+    ...SHADOWS.polaroid,
+  },
+  polaroidOffset: { marginTop: 20 },
+  photo: {
+    width: "100%",
+    aspectRatio: 1,
+    backgroundColor: COLORS.surfaceSunken,
+  },
+  photoPlaceholder: { alignItems: "center", justifyContent: "center" },
+  cardName: {
+    fontFamily: FONTS.serif,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    marginTop: 8,
+    marginBottom: 2,
+  },
+  cardMetaRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 6 },
+  tag: {
+    backgroundColor: COLORS.surfaceSecondary,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: RADII.pill,
+    flexShrink: 1,
+  },
+  tagText: { fontFamily: FONTS.sansMedium, color: COLORS.textSecondary, fontSize: 9 },
   distBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -332,34 +394,20 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surfaceSecondary,
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 999,
+    borderRadius: RADII.pill,
   },
-  distText: { color: COLORS.primary, fontSize: 11, fontWeight: "700" },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: 18,
-    overflow: "hidden",
-  },
-  cardImage: { width: "100%", height: 200, backgroundColor: COLORS.surfaceSecondary },
-  imgPlaceholder: { alignItems: "center", justifyContent: "center" },
-  cardBody: { padding: 16, gap: 6 },
-  cardName: {
-    fontSize: 20,
-    fontWeight: "600",
-    fontFamily: FONTS.serif,
-    color: COLORS.textPrimary,
-  },
-  cardMeta: { fontSize: 12, color: COLORS.textSecondary },
-  cardDrink: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
+  distText: { fontFamily: FONTS.sansBold, color: COLORS.primary, fontSize: 9 },
   empty: { alignItems: "center", paddingTop: 80, gap: 8 },
   emptyTitle: {
-    fontSize: 20,
     fontFamily: FONTS.serif,
+    fontSize: 20,
     color: COLORS.textPrimary,
     marginTop: 12,
   },
-  emptyText: { color: COLORS.textSecondary, textAlign: "center", paddingHorizontal: 40 },
+  emptyText: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    paddingHorizontal: 40,
+  },
 });

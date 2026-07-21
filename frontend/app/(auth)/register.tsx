@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
-import { COLORS, FONTS } from "@/src/theme";
+import { COLORS, FONTS, RADII } from "@/src/theme";
 
 export default function Register() {
   const router = useRouter();
@@ -121,40 +121,44 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   scroll: { padding: 24, paddingTop: 60 },
   brand: {
-    fontSize: 36,
+    fontSize: 34,
     fontFamily: FONTS.serif,
     color: COLORS.textPrimary,
-    fontWeight: "600",
     marginBottom: 8,
   },
-  subtitle: { fontSize: 16, color: COLORS.textSecondary, marginBottom: 40 },
+  subtitle: {
+    fontFamily: FONTS.sans,
+    fontSize: 15,
+    color: COLORS.textMuted,
+    marginBottom: 40,
+  },
   input: {
     backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
+    borderRadius: RADII.pill,
+    paddingHorizontal: 18,
+    paddingVertical: 15,
+    fontFamily: FONTS.sans,
+    fontSize: 15,
     color: COLORS.textPrimary,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   primaryBtn: {
     backgroundColor: COLORS.primary,
-    borderRadius: 999,
+    borderRadius: RADII.pill,
     paddingVertical: 16,
     alignItems: "center",
     marginTop: 12,
   },
-  primaryBtnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  primaryBtnText: { fontFamily: FONTS.sansSemi, color: "#fff", fontSize: 15 },
   linkBtn: { marginTop: 20, alignItems: "center" },
-  linkText: { color: COLORS.textSecondary, fontSize: 14 },
-  linkAccent: { color: COLORS.primary, fontWeight: "600" },
+  linkText: { fontFamily: FONTS.sans, color: COLORS.textSecondary, fontSize: 14 },
+  linkAccent: { fontFamily: FONTS.sansSemi, color: COLORS.primary },
   error: {
+    fontFamily: FONTS.sans,
     color: COLORS.error,
     marginBottom: 12,
     backgroundColor: "#FBEAEA",
-    padding: 10,
-    borderRadius: 10,
+    padding: 12,
+    borderRadius: 12,
   },
 });

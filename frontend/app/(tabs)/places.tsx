@@ -12,7 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api, Cafe } from "@/src/api/client";
-import { COLORS, FONTS } from "@/src/theme";
+import { COLORS, FONTS, RADII, SHADOWS } from "@/src/theme";
 
 export default function Places() {
   const router = useRouter();
@@ -51,7 +51,7 @@ export default function Places() {
         <FlatList
           data={withLocation}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+          contentContainerStyle={{ padding: 20, paddingBottom: 120 }}
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="map-outline" size={56} color={COLORS.primaryMuted} />
@@ -83,7 +83,7 @@ export default function Places() {
                     style={styles.openBtn}
                     testID={`open-map-${item.id}`}
                   >
-                    <Ionicons name="open-outline" size={14} color={COLORS.primary} />
+                    <Ionicons name="arrow-forward-outline" size={13} color={COLORS.primary} />
                     <Text style={styles.openBtnText}>Open in Google Maps</Text>
                   </TouchableOpacity>
                 ) : null}
@@ -100,28 +100,27 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   header: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 },
   eyebrow: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    letterSpacing: 2,
+    fontFamily: FONTS.sans,
+    color: COLORS.textMuted,
+    fontSize: 11,
+    letterSpacing: 2.5,
     textTransform: "uppercase",
-    marginBottom: 4,
+    marginBottom: 5,
   },
   title: {
     fontFamily: FONTS.serif,
-    fontSize: 36,
+    fontSize: 32,
     color: COLORS.textPrimary,
-    fontWeight: "600",
   },
   row: {
     flexDirection: "row",
     gap: 14,
     backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderRadius: RADII.card,
     padding: 16,
     marginBottom: 12,
     alignItems: "flex-start",
+    ...SHADOWS.card,
   },
   pin: {
     backgroundColor: COLORS.primary,
@@ -131,10 +130,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  rowName: { fontSize: 18, fontWeight: "600", color: COLORS.textPrimary, marginBottom: 2 },
-  rowAddr: { color: COLORS.textSecondary, fontSize: 13, marginBottom: 6 },
+  rowName: {
+    fontFamily: FONTS.sansBold,
+    fontSize: 16,
+    color: COLORS.textPrimary,
+    marginBottom: 2,
+  },
+  rowAddr: { fontFamily: FONTS.sans, color: COLORS.textMuted, fontSize: 13, marginBottom: 6 },
   openBtn: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start" },
-  openBtnText: { color: COLORS.primary, fontWeight: "600", fontSize: 13 },
+  openBtnText: { fontFamily: FONTS.sansSemi, color: COLORS.primary, fontSize: 13 },
   empty: { alignItems: "center", paddingTop: 80, gap: 8 },
   emptyTitle: {
     fontSize: 20,
@@ -142,5 +146,10 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginTop: 12,
   },
-  emptyText: { color: COLORS.textSecondary, textAlign: "center", paddingHorizontal: 40 },
+  emptyText: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    paddingHorizontal: 40,
+  },
 });

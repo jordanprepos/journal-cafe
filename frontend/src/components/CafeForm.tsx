@@ -17,7 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { CafeInput, Cafe } from "@/src/api/client";
 import { geocodeAddress } from "@/src/utils/geocode";
-import { COLORS, FONTS } from "@/src/theme";
+import { COLORS, FONTS, RADII, SHADOWS } from "@/src/theme";
 
 interface Props {
   title: string;
@@ -120,19 +120,21 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.headerRow}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.iconBtn}
-            testID="form-back-button"
-          >
-            <Ionicons name="chevron-back" size={24} color={COLORS.textPrimary} />
+          <TouchableOpacity onPress={() => router.back()} testID="form-back-button">
+            <Text style={styles.cancel}>Cancel</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{title}</Text>
-          <View style={{ width: 40 }} />
+          <TouchableOpacity onPress={submit} disabled={saving} testID="form-save-button">
+            {saving ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <Text style={styles.save}>Save</Text>
+            )}
+          </TouchableOpacity>
         </View>
 
         <ScrollView
-          contentContainerStyle={{ padding: 20, paddingBottom: 120 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 60 }}
           keyboardShouldPersistTaps="handled"
         >
           {error ? (
@@ -141,135 +143,163 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
             </Text>
           ) : null}
 
-          <Label>Photos</Label>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              {photos.map((uri, idx) => (
-                <View key={idx} style={styles.thumb}>
-                  <Image source={{ uri }} style={styles.thumbImg} />
-                  <TouchableOpacity
-                    style={styles.thumbX}
-                    onPress={() => removePhoto(idx)}
-                    testID={`remove-photo-${idx}`}
-                  >
-                    <Ionicons name="close" size={14} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-              <TouchableOpacity
-                onPress={pickPhoto}
-                style={[styles.thumb, styles.thumbAdd]}
-                testID="add-photo-button"
-              >
-                <Ionicons name="camera" size={26} color={COLORS.primary} />
-                <Text style={styles.thumbAddText}>Add</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
+          {photos.length === 0 ? (
+            <TouchableOpacity
+              style={styles.dropzone}
+              onPress={pickPhoto}
+              testID="add-photo-button"
+            >
+              <Ionicons name="camera-outline" size={26} color={COLORS.primary} />
+              <Text style={styles.dropzoneTitle}>Add photos</Text>
+              <Text style={styles.dropzoneHint}>or paste from camera roll</Text>
+            </TouchableOpacity>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.thumbStrip}
+            >
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                {photos.map((uri, idx) => (
+                  <View key={idx} style={styles.thumb}>
+                    <Image source={{ uri }} style={styles.thumbImg} />
+                    <TouchableOpacity
+                      style={styles.thumbX}
+                      onPress={() => removePhoto(idx)}
+                      testID={`remove-photo-${idx}`}
+                    >
+                      <Ionicons name="close" size={14} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                <TouchableOpacity
+                  onPress={pickPhoto}
+                  style={[styles.thumb, styles.thumbAdd]}
+                  testID="add-photo-button"
+                >
+                  <Ionicons name="camera-outline" size={24} color={COLORS.primary} />
+                  <Text style={styles.thumbAddText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          )}
 
-          <Label>Café name</Label>
-          <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. Blue Bottle Coffee"
-            placeholderTextColor={COLORS.textSecondary}
-            testID="form-name-input"
-          />
-
-          <Label>Google Maps share link</Label>
-          <TextInput
-            style={styles.input}
-            value={locationLink}
-            onChangeText={setLocationLink}
-            placeholder="Paste link from Google Maps app"
-            placeholderTextColor={COLORS.textSecondary}
-            autoCapitalize="none"
-            testID="form-location-input"
-          />
-
-          <Label>Address / area (optional)</Label>
-          <TextInput
-            style={styles.input}
-            value={address}
-            onChangeText={setAddress}
-            placeholder="e.g. Brooklyn, NY"
-            placeholderTextColor={COLORS.textSecondary}
-            testID="form-address-input"
-          />
-          <Text style={styles.caption}>
-            Used to place your café on the map for “Nearby” sorting.
-          </Text>
-
-          <Label>Favourite drink</Label>
-          <TextInput
-            style={styles.input}
-            value={favoriteDrink}
-            onChangeText={setFavoriteDrink}
-            placeholder="e.g. Iced oat latte"
-            placeholderTextColor={COLORS.textSecondary}
-            testID="form-drink-input"
-          />
-
-          <Label>Visited date</Label>
-          <TextInput
-            style={styles.input}
-            value={visitedDate}
-            onChangeText={setVisitedDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={COLORS.textSecondary}
-            testID="form-date-input"
-          />
-
-          <Label>Rating</Label>
-          <View style={styles.starsRow}>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <TouchableOpacity
-                key={i}
-                onPress={() => setRating(i === rating ? 0 : i)}
-                testID={`form-rating-${i}`}
-              >
-                <Ionicons
-                  name={i <= rating ? "star" : "star-outline"}
-                  size={36}
-                  color={COLORS.star}
+          <View style={styles.card}>
+            <Field label="Café name">
+              <TextInput
+                style={styles.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="e.g. Blue Bottle Coffee"
+                placeholderTextColor={COLORS.textMuted}
+                testID="form-name-input"
+              />
+            </Field>
+            <Field label="Location">
+              <TextInput
+                style={styles.input}
+                value={locationLink}
+                onChangeText={setLocationLink}
+                placeholder="Paste Maps link"
+                placeholderTextColor={COLORS.textMuted}
+                autoCapitalize="none"
+                testID="form-location-input"
+              />
+            </Field>
+            <Field label="Address / area" hint="Places your café on the map for “Nearby”.">
+              <TextInput
+                style={styles.input}
+                value={address}
+                onChangeText={setAddress}
+                placeholder="e.g. Brooklyn, NY"
+                placeholderTextColor={COLORS.textMuted}
+                testID="form-address-input"
+              />
+            </Field>
+            <View style={styles.splitRow}>
+              <Field label="Visited" style={styles.splitCellLeft} last>
+                <TextInput
+                  style={styles.input}
+                  value={visitedDate}
+                  onChangeText={setVisitedDate}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={COLORS.textMuted}
+                  testID="form-date-input"
                 />
-              </TouchableOpacity>
-            ))}
+              </Field>
+              <Field label="Drink" style={styles.splitCell} last>
+                <TextInput
+                  style={styles.input}
+                  value={favoriteDrink}
+                  onChangeText={setFavoriteDrink}
+                  placeholder="Oat latte"
+                  placeholderTextColor={COLORS.textMuted}
+                  testID="form-drink-input"
+                />
+              </Field>
+            </View>
           </View>
 
-          <Label>Notes</Label>
-          <TextInput
-            style={[styles.input, styles.multiline]}
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Vibe, music, who you were with…"
-            placeholderTextColor={COLORS.textSecondary}
-            multiline
-            textAlignVertical="top"
-            testID="form-notes-input"
-          />
+          <View style={styles.card}>
+            <Field label="Rating" last>
+              <View style={styles.starsRow}>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <TouchableOpacity
+                    key={i}
+                    onPress={() => setRating(i === rating ? 0 : i)}
+                    testID={`form-rating-${i}`}
+                  >
+                    <Ionicons
+                      name={i <= rating ? "star" : "star-outline"}
+                      size={30}
+                      color={COLORS.star}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </Field>
+          </View>
 
-          <TouchableOpacity
-            style={styles.saveBtn}
-            onPress={submit}
-            disabled={saving}
-            testID="form-save-button"
-          >
-            {saving ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.saveBtnText}>Save</Text>
-            )}
-          </TouchableOpacity>
+          <View style={styles.card}>
+            <Field label="Notes" last>
+              <TextInput
+                style={[styles.input, styles.multiline]}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Vibe, music, who you were with…"
+                placeholderTextColor={COLORS.textMuted}
+                multiline
+                textAlignVertical="top"
+                testID="form-notes-input"
+              />
+            </Field>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-function Label({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.label}>{children}</Text>;
+function Field({
+  label,
+  hint,
+  children,
+  style,
+  last,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+  style?: object;
+  last?: boolean;
+}) {
+  return (
+    <View style={[styles.field, !last && styles.fieldDivider, style]}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      {children}
+      {hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -278,44 +308,38 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    marginBottom: 4,
   },
+  cancel: { fontFamily: FONTS.sans, fontSize: 14, color: COLORS.textMuted },
   headerTitle: {
     fontFamily: FONTS.serif,
-    fontSize: 22,
-    color: COLORS.textPrimary,
-    fontWeight: "600",
-  },
-  iconBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  label: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
-    marginTop: 16,
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
+    fontSize: 19,
     color: COLORS.textPrimary,
   },
-  multiline: { minHeight: 110, paddingTop: 12 },
-  caption: { color: COLORS.textSecondary, fontSize: 12, marginTop: 6 },
-  starsRow: { flexDirection: "row", gap: 6, marginVertical: 4 },
+  save: { fontFamily: FONTS.sansBold, fontSize: 14, color: COLORS.primary },
+  dropzone: {
+    height: 150,
+    borderRadius: RADII.card,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: COLORS.borderDashed,
+    backgroundColor: COLORS.inputSurface,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginBottom: 16,
+  },
+  dropzoneTitle: { fontFamily: FONTS.sansSemi, fontSize: 13, color: COLORS.primary },
+  dropzoneHint: { fontFamily: FONTS.sans, fontSize: 11, color: COLORS.textMuted },
+  thumbStrip: { marginBottom: 16 },
   thumb: {
     width: 96,
     height: 96,
-    borderRadius: 16,
-    backgroundColor: COLORS.surfaceSecondary,
+    borderRadius: RADII.card,
+    backgroundColor: COLORS.surfaceSunken,
     overflow: "hidden",
-    position: "relative",
   },
   thumbImg: { width: "100%", height: "100%" },
   thumbX: {
@@ -333,25 +357,48 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1.5,
-    borderColor: COLORS.primaryMuted,
     borderStyle: "dashed",
-    backgroundColor: COLORS.surface,
+    borderColor: COLORS.borderDashed,
+    backgroundColor: COLORS.inputSurface,
     gap: 4,
   },
-  thumbAddText: { color: COLORS.primary, fontWeight: "600", fontSize: 12 },
-  saveBtn: {
-    marginTop: 28,
-    backgroundColor: COLORS.primary,
-    borderRadius: 999,
-    paddingVertical: 16,
-    alignItems: "center",
+  thumbAddText: { fontFamily: FONTS.sansSemi, color: COLORS.primary, fontSize: 12 },
+  card: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADII.card,
+    overflow: "hidden",
+    marginBottom: 14,
+    ...SHADOWS.card,
   },
-  saveBtnText: { color: "#fff", fontWeight: "600", fontSize: 16 },
+  field: { paddingHorizontal: 16, paddingVertical: 12 },
+  fieldDivider: { borderBottomWidth: 1, borderBottomColor: COLORS.borderSubtle },
+  fieldLabel: {
+    fontFamily: FONTS.sans,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: COLORS.textMuted,
+  },
+  fieldHint: { fontFamily: FONTS.sans, fontSize: 11, color: COLORS.textMuted, marginTop: 4 },
+  // Inputs sit flush inside their row — the card supplies the chrome.
+  input: {
+    fontFamily: FONTS.sans,
+    fontSize: 15,
+    color: COLORS.textPrimary,
+    paddingTop: 3,
+    paddingBottom: 0,
+  },
+  multiline: { minHeight: 96, paddingTop: 6 },
+  splitRow: { flexDirection: "row" },
+  splitCell: { flex: 1 },
+  splitCellLeft: { flex: 1, borderRightWidth: 1, borderRightColor: COLORS.borderSubtle },
+  starsRow: { flexDirection: "row", gap: 6, marginTop: 6 },
   error: {
+    fontFamily: FONTS.sans,
     color: COLORS.error,
     backgroundColor: "#FBEAEA",
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 14,
   },
 });

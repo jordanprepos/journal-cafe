@@ -6,12 +6,19 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
+import { useAppFonts } from "@/src/hooks/use-app-fonts";
 import { AuthProvider } from "@/src/context/AuthContext";
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [loaded, error] = useIconFonts();
+  const [iconsLoaded, iconsError] = useIconFonts();
+  const [appFontsLoaded, appFontsError] = useAppFonts();
+
+  // Either family failing shouldn't strand the user on the splash screen —
+  // treat "settled" as loaded-or-errored and render with whatever we got.
+  const loaded = iconsLoaded && appFontsLoaded;
+  const error = iconsError ?? appFontsError;
 
   useEffect(() => {
     if (loaded || error) {
