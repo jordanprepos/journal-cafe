@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   Image,
   TouchableOpacity,
@@ -16,11 +15,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api, Cafe } from "@/src/api/client";
-import { COLORS, FONTS, RADII } from "@/src/theme";
+import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 
 const { width } = Dimensions.get("window");
 
 function Stars({ value }: { value: number }) {
+  const { colors } = useTheme();
   return (
     <View style={{ flexDirection: "row", gap: 2 }}>
       {[1, 2, 3, 4, 5].map((i) => (
@@ -28,7 +28,7 @@ function Stars({ value }: { value: number }) {
           key={i}
           name={i <= value ? "star" : "star-outline"}
           size={20}
-          color={COLORS.star}
+          color={colors.star}
         />
       ))}
     </View>
@@ -38,6 +38,8 @@ function Stars({ value }: { value: number }) {
 export default function CafeDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [cafe, setCafe] = useState<Cafe | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -86,7 +88,7 @@ export default function CafeDetail() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 80 }} />
+        <ActivityIndicator color={colors.primary} style={{ marginTop: 80 }} />
       </SafeAreaView>
     );
   }
@@ -108,7 +110,7 @@ export default function CafeDetail() {
             style={styles.iconBtn}
             testID="detail-back-button"
           >
-            <Ionicons name="chevron-back" size={24} color={COLORS.textPrimary} />
+            <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
           <View style={{ flexDirection: "row", gap: 8 }}>
             <TouchableOpacity
@@ -116,7 +118,7 @@ export default function CafeDetail() {
               style={styles.iconBtn}
               testID="detail-edit-button"
             >
-              <Ionicons name="create-outline" size={22} color={COLORS.textPrimary} />
+              <Ionicons name="create-outline" size={22} color={colors.textPrimary} />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={confirmDelete}
@@ -124,7 +126,7 @@ export default function CafeDetail() {
               disabled={deleting}
               testID="detail-delete-button"
             >
-              <Ionicons name="trash-outline" size={22} color={COLORS.error} />
+              <Ionicons name="trash-outline" size={22} color={colors.error} />
             </TouchableOpacity>
           </View>
         </View>
@@ -142,7 +144,7 @@ export default function CafeDetail() {
           </ScrollView>
         ) : (
           <View style={[styles.coverFallback, { width, height: 280 }]}>
-            <Ionicons name="cafe" size={70} color={COLORS.primaryMuted} />
+            <Ionicons name="cafe" size={70} color={colors.primaryMuted} />
           </View>
         )}
 
@@ -176,7 +178,7 @@ export default function CafeDetail() {
               onPress={() => Linking.openURL(cafe.location_link)}
               testID="detail-open-map"
             >
-              <Ionicons name="map" size={18} color="#fff" />
+              <Ionicons name="map" size={18} color={colors.onPrimary} />
               <Text style={styles.mapBtnText}>Open in Google Maps</Text>
             </TouchableOpacity>
           ) : null}
@@ -194,9 +196,11 @@ export default function CafeDetail() {
 }
 
 function Row({ icon, label, value }: { icon: any; label: string; value: string }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.row}>
-      <Ionicons name={icon} size={18} color={COLORS.textSecondary} />
+      <Ionicons name={icon} size={18} color={colors.textSecondary} />
       <View style={{ flex: 1 }}>
         <Text style={styles.rowLabel}>{label}</Text>
         <Text style={styles.rowValue}>{value}</Text>
@@ -205,8 +209,8 @@ function Row({ icon, label, value }: { icon: any; label: string; value: string }
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+const makeStyles = themedStyles(({ colors }: Theme) => ({
+  container: { flex: 1, backgroundColor: colors.background },
   headerBar: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -220,7 +224,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   iconBtn: {
-    backgroundColor: "rgba(255,255,255,0.9)",
+    backgroundColor: colors.scrim,
     width: 38,
     height: 38,
     borderRadius: 19,
@@ -228,7 +232,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   coverFallback: {
-    backgroundColor: COLORS.surfaceSunken,
+    backgroundColor: colors.surfaceSunken,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -236,36 +240,36 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 28,
     fontFamily: FONTS.serif,
-    color: COLORS.textPrimary,
+    color: colors.textPrimary,
   },
-  metaDate: { fontFamily: FONTS.sans, color: COLORS.textMuted, fontSize: 13 },
+  metaDate: { fontFamily: FONTS.sans, color: colors.textMuted, fontSize: 13 },
   tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 16 },
   tagPill: {
-    backgroundColor: COLORS.surfaceSecondary,
+    backgroundColor: colors.surfaceSecondary,
     paddingHorizontal: 11,
     paddingVertical: 4,
     borderRadius: RADII.pill,
   },
-  tagPillText: { fontFamily: FONTS.sans, fontSize: 11, color: COLORS.textSecondary },
+  tagPillText: { fontFamily: FONTS.sans, fontSize: 11, color: colors.textSecondary },
   row: {
     flexDirection: "row",
     gap: 12,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: colors.border,
     alignItems: "center",
   },
   rowLabel: {
     fontFamily: FONTS.sans,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     fontSize: 10.5,
     letterSpacing: 1.5,
     textTransform: "uppercase",
   },
-  rowValue: { fontFamily: FONTS.sans, color: COLORS.textPrimary, fontSize: 15, marginTop: 2 },
+  rowValue: { fontFamily: FONTS.sans, color: colors.textPrimary, fontSize: 15, marginTop: 2 },
   mapBtn: {
     marginTop: 16,
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
@@ -273,14 +277,14 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: RADII.pill,
   },
-  mapBtnText: { fontFamily: FONTS.sansSemi, color: "#fff", fontSize: 14 },
+  mapBtnText: { fontFamily: FONTS.sansSemi, color: colors.onPrimary, fontSize: 14 },
   sectionLabel: {
     fontFamily: FONTS.sans,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     fontSize: 10.5,
     letterSpacing: 1.5,
     marginBottom: 8,
   },
-  notes: { fontFamily: FONTS.sans, color: COLORS.textPrimary, fontSize: 15, lineHeight: 24 },
-  muted: { fontFamily: FONTS.sans, color: COLORS.textSecondary, textAlign: "center", marginTop: 40 },
-});
+  notes: { fontFamily: FONTS.sans, color: colors.textPrimary, fontSize: 15, lineHeight: 24 },
+  muted: { fontFamily: FONTS.sans, color: colors.textSecondary, textAlign: "center", marginTop: 40 },
+}));

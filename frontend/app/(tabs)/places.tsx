@@ -3,7 +3,6 @@ import {
   View,
   Text,
   FlatList,
-  StyleSheet,
   TouchableOpacity,
   Linking,
   ActivityIndicator,
@@ -12,10 +11,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api, Cafe } from "@/src/api/client";
-import { COLORS, FONTS, RADII, SHADOWS } from "@/src/theme";
+import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 
 export default function Places() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [cafes, setCafes] = useState<Cafe[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -46,7 +47,7 @@ export default function Places() {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
+        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
           data={withLocation}
@@ -54,7 +55,7 @@ export default function Places() {
           contentContainerStyle={{ padding: 20, paddingBottom: 120 }}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Ionicons name="map-outline" size={56} color={COLORS.primaryMuted} />
+              <Ionicons name="map-outline" size={56} color={colors.primaryMuted} />
               <Text style={styles.emptyTitle}>No locations yet</Text>
               <Text style={styles.emptyText}>
                 Add a café with a Google Maps share link to pin it here.
@@ -68,7 +69,7 @@ export default function Places() {
               testID={`place-row-${item.id}`}
             >
               <View style={styles.pin}>
-                <Ionicons name="location" size={22} color="#fff" />
+                <Ionicons name="location" size={22} color={colors.onPrimary} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowName}>{item.name}</Text>
@@ -83,7 +84,7 @@ export default function Places() {
                     style={styles.openBtn}
                     testID={`open-map-${item.id}`}
                   >
-                    <Ionicons name="arrow-forward-outline" size={13} color={COLORS.primary} />
+                    <Ionicons name="arrow-forward-outline" size={13} color={colors.primary} />
                     <Text style={styles.openBtnText}>Open in Google Maps</Text>
                   </TouchableOpacity>
                 ) : null}
@@ -96,12 +97,12 @@ export default function Places() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+const makeStyles = themedStyles(({ colors, shadows, raisedOutline }: Theme) => ({
+  container: { flex: 1, backgroundColor: colors.background },
   header: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 },
   eyebrow: {
     fontFamily: FONTS.sans,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     fontSize: 11,
     letterSpacing: 2.5,
     textTransform: "uppercase",
@@ -110,20 +111,21 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: FONTS.serif,
     fontSize: 32,
-    color: COLORS.textPrimary,
+    color: colors.textPrimary,
   },
   row: {
     flexDirection: "row",
     gap: 14,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: RADII.card,
     padding: 16,
     marginBottom: 12,
     alignItems: "flex-start",
-    ...SHADOWS.card,
+    ...shadows.card,
+    ...raisedOutline,
   },
   pin: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     width: 42,
     height: 42,
     borderRadius: 21,
@@ -133,23 +135,23 @@ const styles = StyleSheet.create({
   rowName: {
     fontFamily: FONTS.sansBold,
     fontSize: 16,
-    color: COLORS.textPrimary,
+    color: colors.textPrimary,
     marginBottom: 2,
   },
-  rowAddr: { fontFamily: FONTS.sans, color: COLORS.textMuted, fontSize: 13, marginBottom: 6 },
+  rowAddr: { fontFamily: FONTS.sans, color: colors.textMuted, fontSize: 13, marginBottom: 6 },
   openBtn: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start" },
-  openBtnText: { fontFamily: FONTS.sansSemi, color: COLORS.primary, fontSize: 13 },
+  openBtnText: { fontFamily: FONTS.sansSemi, color: colors.primary, fontSize: 13 },
   empty: { alignItems: "center", paddingTop: 80, gap: 8 },
   emptyTitle: {
     fontSize: 20,
     fontFamily: FONTS.serif,
-    color: COLORS.textPrimary,
+    color: colors.textPrimary,
     marginTop: 12,
   },
   emptyText: {
     fontFamily: FONTS.sans,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     textAlign: "center",
     paddingHorizontal: 40,
   },
-});
+}));
