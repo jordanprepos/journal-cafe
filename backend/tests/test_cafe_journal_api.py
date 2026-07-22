@@ -34,19 +34,31 @@ def _rand_email(prefix="TEST"):
     return f"{prefix}_{uuid.uuid4().hex[:10]}@example.com"
 
 
+def _register(session, email, password="Passw0rd!", name="TEST User"):
+    """Register a user, failing loudly on a non-200 (e.g. a 429 from the rate
+    limiter) instead of KeyError-ing on the missing access_token later."""
+    r = session.post(
+        f"{API}/auth/register",
+        json={"email": email, "password": password, "name": name},
+        timeout=TIMEOUT,
+    )
+    if r.status_code == 429:
+        pytest.fail(
+            "register was rate-limited (429). The whole suite exceeds the "
+            "5/minute cap — start the backend with RATE_LIMIT_ENABLED=false "
+            "(see RUNNING.md)."
+        )
+    assert r.status_code == 200, f"register failed: {r.status_code} {r.text}"
+    return r.json()
+
+
 @pytest.fixture(scope="session")
 def user_a(session):
     """Primary user; returns dict with email, password, token, user_id, headers."""
     email = _rand_email("TEST_A")
     password = "Passw0rd!"
     name = "TEST User A"
-    r = session.post(
-        f"{API}/auth/register",
-        json={"email": email, "password": password, "name": name},
-        timeout=TIMEOUT,
-    )
-    assert r.status_code == 200, f"register A failed: {r.status_code} {r.text}"
-    data = r.json()
+    data = _register(session, email, password, name)
     return {
         "email": email,
         "password": password,
@@ -61,13 +73,7 @@ def user_a(session):
 def user_b(session):
     email = _rand_email("TEST_B")
     password = "Passw0rd!"
-    r = session.post(
-        f"{API}/auth/register",
-        json={"email": email, "password": password, "name": "TEST User B"},
-        timeout=TIMEOUT,
-    )
-    assert r.status_code == 200
-    data = r.json()
+    data = _register(session, email, password, "TEST User B")
     return {
         "email": email,
         "password": password,
@@ -443,11 +449,7 @@ class TestStats:
     def test_stats_empty_user(self, session):
         # Fresh user
         email = _rand_email("TEST_STATS_EMPTY")
-        reg = session.post(
-            f"{API}/auth/register",
-            json={"email": email, "password": "Passw0rd!", "name": "Stats Empty"},
-            timeout=TIMEOUT,
-        ).json()
+        reg = _register(session, email, name="Stats Empty")
         h = {"Authorization": f"Bearer {reg['access_token']}"}
         r = session.get(f"{API}/stats", headers=h, timeout=TIMEOUT)
         assert r.status_code == 200
@@ -460,11 +462,7 @@ class TestStats:
 
     def test_stats_with_data(self, session):
         email = _rand_email("TEST_STATS_DATA")
-        reg = session.post(
-            f"{API}/auth/register",
-            json={"email": email, "password": "Passw0rd!", "name": "Stats Data"},
-            timeout=TIMEOUT,
-        ).json()
+        reg = _register(session, email, name="Stats Data")
         h = {"Authorization": f"Bearer {reg['access_token']}"}
         cafes = [
             {"name": "S1", "rating": 5, "favorite_drink": "Latte",

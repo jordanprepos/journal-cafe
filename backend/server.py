@@ -47,7 +47,12 @@ async def lifespan(app: FastAPI):
     client.close()
 
 
-limiter = Limiter(key_func=get_remote_address)
+# Enabled by default; set RATE_LIMIT_ENABLED=false to turn off (the test suite makes
+# more register calls than the 5/minute cap allows in a single run).
+limiter = Limiter(
+    key_func=get_remote_address,
+    enabled=os.environ.get("RATE_LIMIT_ENABLED", "true").lower() != "false",
+)
 app = FastAPI(lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

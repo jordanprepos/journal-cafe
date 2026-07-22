@@ -48,7 +48,11 @@ echo "    up on :27017"
 
 echo "==> Backend (uvicorn on :8001)"
 check_port_free 8001 backend
-(cd "$ROOT_DIR/backend" && nohup "$ROOT_DIR/backend/venv/bin/uvicorn" server:app --host 0.0.0.0 --port 8001 --reload > "$LOG_DIR/backend.log" 2>&1 &)
+# Rate limiting is on unless the caller opts out (RATE_LIMIT_ENABLED=false ./dev-up.sh),
+# which is what the backend test suite needs — see RUNNING.md.
+RATE_LIMIT_ENABLED="${RATE_LIMIT_ENABLED:-true}"
+echo "    rate limiting: $RATE_LIMIT_ENABLED"
+(cd "$ROOT_DIR/backend" && RATE_LIMIT_ENABLED="$RATE_LIMIT_ENABLED" nohup "$ROOT_DIR/backend/venv/bin/uvicorn" server:app --host 0.0.0.0 --port 8001 --reload > "$LOG_DIR/backend.log" 2>&1 &)
 
 printf "    waiting for health check"
 ok=0
