@@ -472,7 +472,12 @@ const makeStyles = themedStyles(({ colors, shadows, raisedOutline }: Theme) => (
   },
   search: { flex: 1, fontFamily: FONTS.sans, color: colors.textPrimary, fontSize: 14 },
   sortRow: { flexDirection: "row", gap: 8, paddingHorizontal: 20, marginBottom: 8 },
-  tagRow: { flexGrow: 0, marginBottom: 8 },
+  // flexShrink 0 is load-bearing. This row sits in a column above the grid, and
+  // RN-web gives ScrollView flexShrink: 1 by default — so once the grid below
+  // is full enough to compete for vertical space, the row gets squeezed and the
+  // chips lose their padding (28px tall with few results, 14px with many).
+  // The sibling sort row is a plain View, which already defaults to shrink 0.
+  tagRow: { flexGrow: 0, flexShrink: 0, marginBottom: 8 },
   tagRowContent: { paddingHorizontal: 20, gap: 8 },
   chip: {
     flexDirection: "row",
