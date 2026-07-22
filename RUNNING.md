@@ -32,8 +32,8 @@ Use **Python 3.13** — 3.14 is too new for the pinned dependencies.
 
 ```bash
 cd backend
-python3.13 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+python3.13 -m venv venv
+venv/bin/pip install -r requirements.txt
 ```
 
 ### 3. Frontend dependencies
@@ -59,7 +59,7 @@ docker start journal-mongo
 
 ```bash
 cd backend
-.venv/bin/uvicorn server:app --host 0.0.0.0 --port 8001 --reload
+venv/bin/uvicorn server:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 Health check:
