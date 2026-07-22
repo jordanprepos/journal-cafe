@@ -91,6 +91,24 @@ Find the IP with `ipconfig getifaddr en0`.
 
 ---
 
+## Backend test suite
+
+The suite runs against a live API on `:8001`, and it registers more users than the
+`5/minute` cap on `POST /api/auth/register` allows. Start the backend with rate
+limiting off, or the last registers come back `429`:
+
+```bash
+RATE_LIMIT_ENABLED=false ./dev-up.sh      # or, if starting uvicorn by hand:
+# RATE_LIMIT_ENABLED=false venv/bin/uvicorn server:app --host 0.0.0.0 --port 8001
+
+cd backend && venv/bin/python -m pytest tests/ -q
+```
+
+`RATE_LIMIT_ENABLED` defaults to `true`, so production and normal local dev are
+unaffected — only the test run opts out.
+
+---
+
 ## Test account (local dev only)
 
 A throwaway account already exists in the local `cafe_journal` database for quick sign-in:
