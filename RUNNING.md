@@ -45,7 +45,17 @@ yarn install
 
 ---
 
-## Every time — 3 terminals
+## Every time — the easy way
+
+```bash
+./dev-up.sh      # Docker + Mongo + backend + Metro, with a health check
+./dev-down.sh    # stop everything
+```
+Logs land in `.dev-logs/`. Prefer this over the manual steps below.
+
+---
+
+## Every time — 3 terminals (manual)
 
 ### Terminal 1 — MongoDB (Docker)
 
@@ -125,10 +135,41 @@ Password: secret123
 
 ---
 
+## Troubleshooting
+
+### "Failed to fetch" when logging in
+
+The UI loads but login fails. The browser couldn't reach the API — almost always a bad
+`EXPO_PUBLIC_BACKEND_URL`, **not** a backend problem. Check in this order:
+
+```bash
+# 1. Is the API actually up?
+curl http://localhost:8001/api/            # → {"message":"Cafe Journal API"}
+
+# 2. What URL is the app pointed at?
+grep EXPO_PUBLIC_BACKEND_URL frontend/.env
+
+# 3. Can that URL be reached?
+curl -m 4 -o /dev/null -w "%{http_code}\n" "<the URL from step 2>/api/"
+```
+
+**Most common cause: a stale LAN IP.** If `.env` holds something like
+`http://10.134.102.44:8001` from a previous network, it stops resolving once you switch
+Wi-Fi. Compare against your current IP (`ipconfig getifaddr en0`).
+
+- For **browser** (`yarn web`) → use `http://localhost:8001` (stable, never goes stale).
+- For **phone** (Expo Go) → must be your **current** LAN IP.
+
+**Then restart Metro.** Expo bakes `EXPO_PUBLIC_*` into the bundle at startup, so editing
+`.env` while Metro runs changes nothing.
+
+---
+
 ## Gotchas
 
 - **Order matters:** Mongo → API → frontend. The API creates its Mongo indexes on startup,
   so Mongo must be up first.
+- **The backend venv is `backend/venv/`** (no leading dot).
 - **Don't set `CI=1`** when running Metro yourself — it disables hot reload. Plain
   `yarn web` / `yarn start` gives live reload.
 - **Nearby / geocoding is mobile-only** — intentionally disabled on web. Use Expo Go on a
