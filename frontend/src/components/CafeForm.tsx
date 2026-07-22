@@ -23,6 +23,7 @@ import {
 } from "@/src/utils/geocode";
 import { deviceCurrency } from "@/src/utils/price";
 import { currencyForCountry } from "@/src/constants/currencies";
+import { countryCodeFromTimezone } from "@/src/constants/timezones";
 import { addTag, hasTag, removeTag, MAX_TAGS, PRESET_TAGS } from "@/src/constants/tags";
 import { FACILITIES, Facility } from "@/src/constants/facilities";
 import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
@@ -70,10 +71,13 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
 
   // Pre-fill the currency from where the café actually is, rather than from the
   // phone's region setting — a device set to en-US would otherwise stamp USD on
-  // a café in Jakarta. Prefers the typed address (right even when logging a trip
-  // after you're home), falling back to GPS only if location was already granted
-  // elsewhere, so this never raises a permission prompt. Native-only; on web both
-  // lookups return null and the locale seed stands.
+  // a café in Jakarta. Tiers, best signal first:
+  //   1. the typed address — right even when logging a trip after you're home
+  //   2. GPS, but only if permission was already granted, so this never prompts
+  //   3. the device time zone — no permission, and the only tier that works on
+  //      web, where expo-location's geocoders don't exist at all
+  // The locale seed stays as the last resort. Tiers 1-2 are native-only, so on
+  // web this resolves via the time zone.
   useEffect(() => {
     // Never overwrite a currency the user typed, or one already saved on a café.
     if (currencyTouched.current || initial?.price_currency) return;
@@ -82,9 +86,13 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
     // Geocoding is rate-limited, so wait for typing to settle rather than
     // firing per keystroke.
     const timer = setTimeout(async () => {
-      const iso = addr
+      const located = addr
         ? await countryCodeForAddress(addr)
         : await countryCodeForDeviceLocation();
+      // Time zone still beats the locale seed when the geocoders can't answer:
+      // both are guesses about the user rather than the café, but the zone
+      // tracks where they physically are while the region setting doesn't.
+      const iso = located ?? countryCodeFromTimezone();
       const detected = currencyForCountry(iso);
       // Re-check the guard: the user may have typed a currency while we waited.
       if (cancelled || !detected || currencyTouched.current) return;
