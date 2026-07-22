@@ -11,7 +11,7 @@ import {
   Alert,
   Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api, Cafe } from "@/src/api/client";
@@ -43,6 +43,10 @@ export default function CafeDetail() {
   const router = useRouter();
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  // The cover photo is deliberately full-bleed (this screen skips the top safe
+  // edge), so the floating controls have to clear the status bar themselves —
+  // more so on Android, where app.json sets edgeToEdgeEnabled.
+  const insets = useSafeAreaInsets();
   const [cafe, setCafe] = useState<Cafe | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -109,7 +113,7 @@ export default function CafeDetail() {
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-        <View style={styles.headerBar}>
+        <View style={[styles.headerBar, { paddingTop: insets.top + 12 }]}>
           <TouchableOpacity
             onPress={() => router.back()}
             style={styles.iconBtn}
