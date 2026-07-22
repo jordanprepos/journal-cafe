@@ -127,11 +127,15 @@ function StatCard({
   const compact = value.length > 4;
   return (
     <View style={styles.statCard} testID={testID}>
-      <Ionicons name={icon} size={18} color={colors.primary} />
+      <View style={styles.statHeader}>
+        <Ionicons name={icon} size={18} color={colors.primary} />
+        <Text style={styles.statLabel} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
       <Text style={[styles.statValue, compact && styles.statValueCompact]} numberOfLines={1}>
         {value}
       </Text>
-      <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
@@ -162,14 +166,21 @@ const makeStyles = themedStyles(({ colors, shadows, raisedOutline }: Theme) => (
     ...shadows.card,
     ...raisedOutline,
   },
+  // Row 1: icon beside the label. Row 2 is the value below.
+  statHeader: { flexDirection: "row", alignItems: "center", gap: 7 },
   statValue: {
     fontFamily: FONTS.serif,
     fontSize: 24,
     color: colors.textPrimary,
-    marginTop: 4,
+    marginTop: 10,
   },
-  statValueCompact: { fontSize: 18, marginTop: 8 },
-  statLabel: { fontFamily: FONTS.sans, color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  statValueCompact: { fontSize: 18, marginTop: 12 },
+  statLabel: {
+    flexShrink: 1,
+    fontFamily: FONTS.sans,
+    color: colors.textMuted,
+    fontSize: 12,
+  },
   sectionTitle: {
     marginTop: 24,
     marginBottom: 10,
