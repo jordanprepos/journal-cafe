@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -16,8 +16,13 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { CafeInput, Cafe } from "@/src/api/client";
 import { StarPicker } from "@/src/components/StarPicker";
-import { geocodeAddress } from "@/src/utils/geocode";
+import {
+  countryCodeForAddress,
+  countryCodeForDeviceLocation,
+  geocodeAddress,
+} from "@/src/utils/geocode";
 import { deviceCurrency } from "@/src/utils/price";
+import { currencyForCountry } from "@/src/constants/currencies";
 import { addTag, hasTag, removeTag, MAX_TAGS, PRESET_TAGS } from "@/src/constants/tags";
 import { FACILITIES, Facility } from "@/src/constants/facilities";
 import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
@@ -52,13 +57,44 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
   const [priceMax, setPriceMax] = useState(
     initial?.price_max != null ? String(initial.price_max) : "",
   );
-  // Pre-fill from the device locale so it's usually already correct.
+  // Seeded from the device locale so the field is never empty, then refined
+  // from the café's actual location by the effect below.
   const [currency, setCurrency] = useState(initial?.price_currency || deviceCurrency());
+  // Once the user edits the currency themselves, detection stops touching it.
+  const currencyTouched = useRef(false);
   const [menu, setMenu] = useState<string[]>(initial?.recommended_menu ?? []);
   const [menuDraft, setMenuDraft] = useState("");
   const [facilities, setFacilities] = useState<Facility[]>(initial?.facilities ?? []);
   const [hospitality, setHospitality] = useState(initial?.hospitality ?? 0);
   const [error, setError] = useState("");
+
+  // Pre-fill the currency from where the café actually is, rather than from the
+  // phone's region setting — a device set to en-US would otherwise stamp USD on
+  // a café in Jakarta. Prefers the typed address (right even when logging a trip
+  // after you're home), falling back to GPS only if location was already granted
+  // elsewhere, so this never raises a permission prompt. Native-only; on web both
+  // lookups return null and the locale seed stands.
+  useEffect(() => {
+    // Never overwrite a currency the user typed, or one already saved on a café.
+    if (currencyTouched.current || initial?.price_currency) return;
+    const addr = address.trim();
+    let cancelled = false;
+    // Geocoding is rate-limited, so wait for typing to settle rather than
+    // firing per keystroke.
+    const timer = setTimeout(async () => {
+      const iso = addr
+        ? await countryCodeForAddress(addr)
+        : await countryCodeForDeviceLocation();
+      const detected = currencyForCountry(iso);
+      // Re-check the guard: the user may have typed a currency while we waited.
+      if (cancelled || !detected || currencyTouched.current) return;
+      setCurrency(detected);
+    }, 800);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [address, initial?.price_currency]);
 
   function toggleFacility(key: Facility) {
     setFacilities((f) => (f.includes(key) ? f.filter((x) => x !== key) : [...f, key]));
@@ -365,7 +401,10 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
                 <TextInput
                   style={[styles.input, styles.currencyInput]}
                   value={currency}
-                  onChangeText={(t) => setCurrency(t.toUpperCase())}
+                  onChangeText={(t) => {
+                    currencyTouched.current = true;
+                    setCurrency(t.toUpperCase());
+                  }}
                   placeholder="CUR"
                   placeholderTextColor={colors.textMuted}
                   autoCapitalize="characters"
