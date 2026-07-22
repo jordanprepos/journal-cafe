@@ -11,6 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api, Cafe } from "@/src/api/client";
+import { cafeMapsUrl } from "@/src/utils/maps";
 import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 
 export default function Places() {
@@ -58,7 +59,7 @@ export default function Places() {
               <Ionicons name="map-outline" size={56} color={colors.primaryMuted} />
               <Text style={styles.emptyTitle}>No locations yet</Text>
               <Text style={styles.emptyText}>
-                Add a café with a Google Maps share link to pin it here.
+                Add a café with an address to pin it here.
               </Text>
             </View>
           }
@@ -78,16 +79,14 @@ export default function Places() {
                     {item.address}
                   </Text>
                 ) : null}
-                {item.location_link ? (
-                  <TouchableOpacity
-                    onPress={() => Linking.openURL(item.location_link)}
-                    style={styles.openBtn}
-                    testID={`open-map-${item.id}`}
-                  >
-                    <Ionicons name="arrow-forward-outline" size={13} color={colors.primary} />
-                    <Text style={styles.openBtnText}>Open in Google Maps</Text>
-                  </TouchableOpacity>
-                ) : null}
+                <TouchableOpacity
+                  onPress={() => Linking.openURL(cafeMapsUrl(item))}
+                  style={styles.openBtn}
+                  testID={`open-map-${item.id}`}
+                >
+                  <Ionicons name="arrow-forward-outline" size={13} color={colors.primary} />
+                  <Text style={styles.openBtnText}>Open in Google Maps</Text>
+                </TouchableOpacity>
               </View>
             </TouchableOpacity>
           )}

@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api, Cafe } from "@/src/api/client";
+import { cafeMapsUrl } from "@/src/utils/maps";
 import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 
 const { width } = Dimensions.get("window");
@@ -172,16 +173,14 @@ export default function CafeDetail() {
             <Row icon="location-outline" label="Address" value={cafe.address} />
           ) : null}
 
-          {cafe.location_link ? (
-            <TouchableOpacity
-              style={styles.mapBtn}
-              onPress={() => Linking.openURL(cafe.location_link)}
-              testID="detail-open-map"
-            >
-              <Ionicons name="map" size={18} color={colors.onPrimary} />
-              <Text style={styles.mapBtnText}>Open in Google Maps</Text>
-            </TouchableOpacity>
-          ) : null}
+          <TouchableOpacity
+            style={styles.mapBtn}
+            onPress={() => Linking.openURL(cafeMapsUrl(cafe))}
+            testID="detail-open-map"
+          >
+            <Ionicons name="map" size={18} color={colors.onPrimary} />
+            <Text style={styles.mapBtnText}>Open in Google Maps</Text>
+          </TouchableOpacity>
 
           {cafe.notes ? (
             <View style={{ marginTop: 20 }}>

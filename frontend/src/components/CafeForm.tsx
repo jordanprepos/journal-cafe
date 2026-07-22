@@ -36,7 +36,6 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
   const styles = useThemedStyles(makeStyles);
   const [name, setName] = useState(initial?.name ?? "");
   const [photos, setPhotos] = useState<string[]>(initial?.photos ?? []);
-  const [locationLink, setLocationLink] = useState(initial?.location_link ?? "");
   const [address, setAddress] = useState(initial?.address ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [rating, setRating] = useState(initial?.rating ?? 0);
@@ -116,7 +115,10 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
       await onSave({
         name: name.trim(),
         photos,
-        location_link: locationLink.trim(),
+        // The pasted-link field is gone; the map button now searches by
+        // name + address. Carry an existing café's saved link through an edit
+        // (it's still preferred when present), and send "" for new cafés.
+        location_link: initial?.location_link ?? "",
         address: addr,
         notes: notes.trim(),
         rating,
@@ -218,18 +220,10 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
                 testID="form-name-input"
               />
             </Field>
-            <Field label="Location">
-              <TextInput
-                style={styles.input}
-                value={locationLink}
-                onChangeText={setLocationLink}
-                placeholder="Paste Maps link"
-                placeholderTextColor={colors.textMuted}
-                autoCapitalize="none"
-                testID="form-location-input"
-              />
-            </Field>
-            <Field label="Address / area" hint="Places your café on the map for “Nearby”.">
+            <Field
+              label="Address / area"
+              hint="Used for the map button and “Nearby” sorting."
+            >
               <TextInput
                 style={styles.input}
                 value={address}
