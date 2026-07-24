@@ -11,13 +11,14 @@ import {
   Alert,
   Platform,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api, Cafe } from "@/src/api/client";
 import { facilityMeta } from "@/src/constants/facilities";
 import { cafeMapsUrl } from "@/src/utils/maps";
 import { formatPriceRange } from "@/src/utils/price";
+import { useSafeTop } from "@/src/hooks/use-safe-top";
 import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 
 const { width } = Dimensions.get("window");
@@ -44,9 +45,11 @@ export default function CafeDetail() {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   // The cover photo is deliberately full-bleed (this screen skips the top safe
-  // edge), so the floating controls have to clear the status bar themselves —
-  // more so on Android, where app.json sets edgeToEdgeEnabled.
-  const insets = useSafeAreaInsets();
+  // edge), so the floating controls have to clear the status bar themselves.
+  // useSafeTop falls back to StatusBar.currentHeight because some Android
+  // devices report insets.top as 0 under edge-to-edge, which left the buttons
+  // overlapping the status bar.
+  const safeTop = useSafeTop();
   const [cafe, setCafe] = useState<Cafe | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -113,7 +116,7 @@ export default function CafeDetail() {
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-        <View style={[styles.headerBar, { paddingTop: insets.top + 12 }]}>
+        <View style={[styles.headerBar, { paddingTop: safeTop + 12 }]}>
           <TouchableOpacity
             onPress={() => router.back()}
             style={styles.iconBtn}
