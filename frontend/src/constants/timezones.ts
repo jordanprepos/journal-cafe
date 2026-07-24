@@ -105,7 +105,7 @@ export const TIMEZONE_COUNTRY: Record<string, string> = {
 export function countryCodeFromTimezone(): string | null {
   try {
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return zone ? (TIMEZONE_COUNTRY[zone] ?? null) : null;
+    return TIMEZONE_COUNTRY[zone] ?? null;
   } catch {
     return null; // Intl unavailable or no zone reported.
   }
