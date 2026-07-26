@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeTop } from "@/src/hooks/use-safe-top";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
@@ -66,6 +67,7 @@ export default function Journal() {
   const router = useRouter();
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const safeTop = useSafeTop();
   const [cafes, setCafes] = useState<Cafe[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -198,7 +200,7 @@ export default function Journal() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={[styles.container, { paddingTop: safeTop }]} edges={[]}>
       <View style={styles.header}>
         <View>
           <Text style={styles.eyebrow}>Your café diary</Text>

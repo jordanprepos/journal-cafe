@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { View, Text, ScrollView, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeTop } from "@/src/hooks/use-safe-top";
 import { useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/src/api/client";
@@ -17,6 +18,7 @@ interface Stats {
 export default function StatsScreen() {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const safeTop = useSafeTop();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -40,7 +42,7 @@ export default function StatsScreen() {
   const maxMonth = stats ? Math.max(1, ...stats.by_month.map((m) => m.count)) : 1;
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={[styles.container, { paddingTop: safeTop }]} edges={[]}>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120 }}>
         <Text style={styles.eyebrow}>Your coffee year</Text>
         <Text style={styles.title}>Stats</Text>

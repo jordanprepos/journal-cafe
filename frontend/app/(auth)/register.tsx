@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeTop } from "@/src/hooks/use-safe-top";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
 import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
@@ -19,6 +20,7 @@ export default function Register() {
   const { register } = useAuth();
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const safeTop = useSafeTop();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -47,7 +49,7 @@ export default function Register() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+    <SafeAreaView style={[styles.container, { paddingTop: safeTop }]} edges={["bottom"]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
