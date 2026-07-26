@@ -8,6 +8,7 @@ import {
   ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeTop } from "@/src/hooks/use-safe-top";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/context/AuthContext";
@@ -35,6 +36,7 @@ export default function Profile() {
   const router = useRouter();
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const safeTop = useSafeTop();
   const { mode, setMode } = useThemeMode();
   const [backfilling, setBackfilling] = useState(false);
   const [backfillMsg, setBackfillMsg] = useState("");
@@ -85,7 +87,7 @@ export default function Profile() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={[styles.container, { paddingTop: safeTop }]} edges={[]}>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120 }}>
         <Text style={styles.eyebrow}>Account</Text>
         <Text style={styles.title}>Profile</Text>

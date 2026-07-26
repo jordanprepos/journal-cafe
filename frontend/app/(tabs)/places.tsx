@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeTop } from "@/src/hooks/use-safe-top";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api, Cafe } from "@/src/api/client";
@@ -18,6 +19,7 @@ export default function Places() {
   const router = useRouter();
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const safeTop = useSafeTop();
   const [cafes, setCafes] = useState<Cafe[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -41,7 +43,7 @@ export default function Places() {
   const withLocation = cafes.filter((c) => c.location_link || c.address);
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={[styles.container, { paddingTop: safeTop }]} edges={[]}>
       <View style={styles.header}>
         <Text style={styles.eyebrow}>Where you&apos;ve been</Text>
         <Text style={styles.title}>Places</Text>

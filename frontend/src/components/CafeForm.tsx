@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeTop } from "@/src/hooks/use-safe-top";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -43,6 +44,7 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const safeTop = useSafeTop();
   const [name, setName] = useState(initial?.name ?? "");
   const [photos, setPhotos] = useState<string[]>(initial?.photos ?? []);
   const [address, setAddress] = useState(initial?.address ?? "");
@@ -245,7 +247,7 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+    <SafeAreaView style={[styles.container, { paddingTop: safeTop }]} edges={["bottom"]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
