@@ -137,7 +137,7 @@ short version:
 
 ```bash
 npx -y firebase-tools@latest login
-npx -y firebase-tools@latest use <PROJECT_ID>
+npx -y firebase-tools@latest use my-cafe-journal
 npx -y firebase-tools@latest deploy --only auth,firestore,storage
 
 cp frontend/.env.example frontend/.env    # then fill it in
@@ -180,7 +180,7 @@ All config lives in `frontend/.env` — see [`frontend/.env.example`](frontend/.
 Fetch the Firebase values with:
 
 ```bash
-npx -y firebase-tools@latest apps:sdkconfig WEB --project <PROJECT_ID>
+npx -y firebase-tools@latest apps:sdkconfig WEB --project my-cafe-journal
 ```
 
 ---
@@ -326,11 +326,11 @@ npx -y firebase-tools@latest deploy --only firestore,storage
 npx -y firebase-tools@latest deploy --only auth
 
 # Inspect the data
-open "https://console.firebase.google.com/project/<PROJECT_ID>/firestore"
+open "https://console.firebase.google.com/project/my-cafe-journal/firestore"
 
 # List registered apps (iOS / Web) and re-fetch their config
-npx -y firebase-tools@latest apps:list --project <PROJECT_ID>
-npx -y firebase-tools@latest apps:sdkconfig WEB --project <PROJECT_ID>
+npx -y firebase-tools@latest apps:list --project my-cafe-journal
+npx -y firebase-tools@latest apps:sdkconfig WEB --project my-cafe-journal
 ```
 
 Always invoke the CLI via `npx -y firebase-tools@latest` so it stays current.
