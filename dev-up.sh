@@ -46,18 +46,18 @@ else
 fi
 echo "    up on :27017"
 
-echo "==> Backend (uvicorn on :8001)"
-check_port_free 8001 backend
+echo "==> Backend (uvicorn on :1100)"
+check_port_free 1100 backend
 # Rate limiting is on unless the caller opts out (RATE_LIMIT_ENABLED=false ./dev-up.sh),
 # which is what the backend test suite needs — see RUNNING.md.
 RATE_LIMIT_ENABLED="${RATE_LIMIT_ENABLED:-true}"
 echo "    rate limiting: $RATE_LIMIT_ENABLED"
-(cd "$ROOT_DIR/backend" && RATE_LIMIT_ENABLED="$RATE_LIMIT_ENABLED" nohup "$ROOT_DIR/backend/venv/bin/uvicorn" server:app --host 0.0.0.0 --port 8001 --reload > "$LOG_DIR/backend.log" 2>&1 &)
+(cd "$ROOT_DIR/backend" && RATE_LIMIT_ENABLED="$RATE_LIMIT_ENABLED" nohup "$ROOT_DIR/backend/venv/bin/uvicorn" server:app --host 0.0.0.0 --port 1100 --reload > "$LOG_DIR/backend.log" 2>&1 &)
 
 printf "    waiting for health check"
 ok=0
 for i in $(seq 1 30); do
-  if curl -sf http://localhost:8001/api/ >/dev/null 2>&1; then
+  if curl -sf http://localhost:1100/api/ >/dev/null 2>&1; then
     ok=1
     break
   fi
@@ -69,19 +69,19 @@ if [ "$ok" -ne 1 ]; then
   echo "    backend failed to come up — see $LOG_DIR/backend.log" >&2
   exit 1
 fi
-echo "    up — $(curl -s http://localhost:8001/api/)"
+echo "    up — $(curl -s http://localhost:1100/api/)"
 
-echo "==> Frontend (yarn web on :8081)"
-check_port_free 8081 frontend
-(cd "$ROOT_DIR/frontend" && nohup yarn web > "$LOG_DIR/frontend.log" 2>&1 &)
+echo "==> Frontend (yarn web on :1101)"
+check_port_free 1101 frontend
+(cd "$ROOT_DIR/frontend" && nohup yarn web --port 1101 > "$LOG_DIR/frontend.log" 2>&1 &)
 echo "    starting — Metro takes a few seconds to bundle, watch $LOG_DIR/frontend.log"
 
 cat <<EOF
 
 All services launched:
   MongoDB   localhost:27017
-  Backend   http://localhost:8001   (log: $LOG_DIR/backend.log)
-  Frontend  http://localhost:8081   (log: $LOG_DIR/frontend.log)
+  Backend   http://localhost:1100   (log: $LOG_DIR/backend.log)
+  Frontend  http://localhost:1101   (log: $LOG_DIR/frontend.log)
 
 Stop everything with: ./dev-down.sh
 EOF
