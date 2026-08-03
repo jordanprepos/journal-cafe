@@ -4,9 +4,9 @@
     {
       "name": "frontend-web",
       "runtimeExecutable": "yarn",
-      "runtimeArgs": ["web"],
+      "runtimeArgs": ["web", "--port", "1101"],
       "cwd": "frontend",
-      "port": 8081
+      "port": 1101
     }
   ]
 }
