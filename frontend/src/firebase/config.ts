@@ -3,7 +3,7 @@ import { getAuth, initializeAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-import { authPersistence } from "./persistence";
+import { authPersistence, authPopupResolver } from "./persistence";
 
 // Expo bakes EXPO_PUBLIC_* into the bundle at startup, so edits to .env need a
 // Metro restart to take effect — same rule as the old EXPO_PUBLIC_BACKEND_URL.
@@ -33,6 +33,11 @@ const existing = getApps().length > 0;
 export const app = existing ? getApp() : initializeApp(firebaseConfig);
 export const auth = existing
   ? getAuth(app)
-  : initializeAuth(app, { persistence: authPersistence });
+  : initializeAuth(app, {
+      persistence: authPersistence,
+      // Omit the key entirely on native — initializeAuth rejects an explicit
+      // `popupRedirectResolver: undefined`.
+      ...(authPopupResolver ? { popupRedirectResolver: authPopupResolver } : {}),
+    });
 export const db = getFirestore(app);
 export const storage = getStorage(app);

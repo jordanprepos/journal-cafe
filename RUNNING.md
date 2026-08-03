@@ -16,6 +16,17 @@ npx -y firebase-tools@latest --version
 
 ## One-time setup
 
+> **Status on this machine (2026-08-03):** steps 1–7 are **done** against project
+> `my-cafe-journal`. Both apps are registered — iOS
+> `1:1027531417032:ios:89701d8fae8cfdc413ccfd` (bundle
+> `com.christopherjtp.cafejournal`) and Web
+> `1:1027531417032:web:2ea9d1364a5f7a2d13ccfd`. Email/Password and Google are
+> enabled, Firestore rules are live, and `frontend/.env` is filled in.
+>
+> **Two things remain:** Cloud Storage isn't provisioned (see step 5b), and the
+> `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values in `.env` are still blank (step 6).
+> The steps below are kept for setting the project up from scratch elsewhere.
+
 ### 1. Sign in to Firebase
 
 ```bash
@@ -35,7 +46,7 @@ npx -y firebase-tools@latest projects:list
 Then select it (this writes `.firebaserc`):
 
 ```bash
-npx -y firebase-tools@latest use <PROJECT_ID>
+npx -y firebase-tools@latest use my-cafe-journal
 ```
 
 ### 3. Register the apps
@@ -45,12 +56,12 @@ An **Apple (iOS)** app, matching `ios.bundleIdentifier` in `frontend/app.json`, 
 
 ```bash
 npx -y firebase-tools@latest apps:create IOS "Café Journal iOS" \
-  --bundle-id com.christopherjtp.cafejournal --project <PROJECT_ID>
+  --bundle-id com.christopherjtp.cafejournal --project my-cafe-journal
 
-npx -y firebase-tools@latest apps:create WEB "Café Journal Web" --project <PROJECT_ID>
+npx -y firebase-tools@latest apps:create WEB "Café Journal Web" --project my-cafe-journal
 ```
 
-List them again any time with `apps:list --project <PROJECT_ID>`.
+List them again any time with `apps:list --project my-cafe-journal`.
 
 ### 4. Enable sign-in providers
 
@@ -58,20 +69,36 @@ List them again any time with `apps:list --project <PROJECT_ID>`.
 generates the OAuth clients Google Sign-in needs:
 
 ```bash
-npx -y firebase-tools@latest deploy --only auth --project <PROJECT_ID>
+npx -y firebase-tools@latest deploy --only auth --project my-cafe-journal
 ```
 
 ### 5. Create Firestore and deploy the rules
 
 ```bash
-npx -y firebase-tools@latest firestore:databases:list --project <PROJECT_ID>
+npx -y firebase-tools@latest firestore:databases:list --project my-cafe-journal
 # if there's no database yet, pick a location and create one:
-npx -y firebase-tools@latest firestore:locations --project <PROJECT_ID>
+npx -y firebase-tools@latest firestore:locations --project my-cafe-journal
 npx -y firebase-tools@latest firestore:databases:create "(default)" \
-  --location <LOCATION> --project <PROJECT_ID>
+  --location <LOCATION> --project my-cafe-journal
 
-npx -y firebase-tools@latest deploy --only firestore,storage --project <PROJECT_ID>
+npx -y firebase-tools@latest deploy --only firestore --project my-cafe-journal
 ```
+
+### 5b. Enable Cloud Storage (console — needed for café photos)
+
+The CLI has no bucket-create command, so this one is manual:
+
+1. Open https://console.firebase.google.com/project/my-cafe-journal/storage
+2. Click **Get Started**. On projects created after late 2024 this requires the
+   **Blaze (pay-as-you-go)** plan — a billing decision, so it's left to you.
+3. Then deploy the rules:
+
+```bash
+npx -y firebase-tools@latest deploy --only storage --project my-cafe-journal
+```
+
+Until this is done, adding a café **without** photos works fine; adding one **with**
+photos fails on upload.
 
 `firestore.rules` and `storage.rules` scope every read and write to the signed-in
 owner. **Review them before you share the app** — see the note at the end.
@@ -80,7 +107,7 @@ owner. **Review them before you share the app** — see the note at the end.
 
 ```bash
 cp frontend/.env.example frontend/.env
-npx -y firebase-tools@latest apps:sdkconfig WEB --project <PROJECT_ID>
+npx -y firebase-tools@latest apps:sdkconfig WEB --project my-cafe-journal
 ```
 
 Copy the values into `frontend/.env`. The three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID`

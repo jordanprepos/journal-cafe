@@ -6,3 +6,9 @@ import { getReactNativePersistence } from "firebase/auth";
 
 /** Keeps the signed-in user across app restarts on iOS/Android. */
 export const authPersistence = getReactNativePersistence(AsyncStorage);
+
+/**
+ * Popup sign-in is web-only — native goes through expo-auth-session instead, so
+ * there's no resolver to install here. See persistence.web.ts.
+ */
+export const authPopupResolver = undefined;
