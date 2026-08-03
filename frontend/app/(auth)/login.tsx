@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useSafeTop } from "@/src/hooks/use-safe-top";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
+import { GoogleSignInButton } from "@/src/components/GoogleSignInButton";
 import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 
 export default function Login() {
@@ -91,6 +92,8 @@ export default function Login() {
               <Text style={styles.primaryBtnText}>Sign in</Text>
             )}
           </TouchableOpacity>
+
+          <GoogleSignInButton onError={setError} />
 
           <TouchableOpacity
             onPress={() => router.push("/(auth)/register")}

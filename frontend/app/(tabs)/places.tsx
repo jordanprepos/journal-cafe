@@ -1,4 +1,3 @@
-import { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -9,9 +8,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useSafeTop } from "@/src/hooks/use-safe-top";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { api, Cafe } from "@/src/api/client";
+import { useCafes } from "@/src/hooks/use-cafes";
 import { cafeMapsUrl } from "@/src/utils/maps";
 import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 
@@ -20,25 +19,7 @@ export default function Places() {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const safeTop = useSafeTop();
-  const [cafes, setCafes] = useState<Cafe[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    try {
-      const list = await api.listCafes();
-      setCafes(list);
-    } catch (e) {
-      console.warn(e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+  const { cafes, loading } = useCafes();
 
   const withLocation = cafes.filter((c) => c.location_link || c.address);
 

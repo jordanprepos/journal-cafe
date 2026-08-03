@@ -1,42 +1,97 @@
 # Running Café Journal locally
 
-Three pieces, each in its own terminal: **MongoDB → API → frontend**.
+The app talks straight to **Firebase** — Authentication for sign-in, Firestore for
+café entries, Cloud Storage for photos. There is no local API or database to run.
 
 All commands assume you're in the project root
 (`.../journal-cafe` or the worktree you're using).
+
+The Firebase CLI is always invoked through `npx` so it stays current:
+
+```bash
+npx -y firebase-tools@latest --version
+```
 
 ---
 
 ## One-time setup
 
-### 1. Env files
-
-`backend/.env`:
-```env
-MONGO_URL=mongodb://localhost:27017
-DB_NAME=cafe_journal
-JWT_SECRET=<any 32+ char random string>
-```
-
-`frontend/.env`:
-```env
-EXPO_PUBLIC_BACKEND_URL=http://localhost:8001
-```
-
-> Both are gitignored. **Create `frontend/.env` before starting Metro** — Expo bakes
-> `EXPO_PUBLIC_*` vars in at startup, so edits while it's running require a restart.
-
-### 2. Backend Python venv
-
-Use **Python 3.13** — 3.14 is too new for the pinned dependencies.
+### 1. Sign in to Firebase
 
 ```bash
-cd backend
-python3.13 -m venv venv
-venv/bin/pip install -r requirements.txt
+npx -y firebase-tools@latest login
 ```
 
-### 3. Frontend dependencies
+On a machine with no browser, use `login --no-localhost`.
+
+### 2. Point the CLI at the project
+
+Café Journal uses project number **1027531417032**. Find its project *ID*:
+
+```bash
+npx -y firebase-tools@latest projects:list
+```
+
+Then select it (this writes `.firebaserc`):
+
+```bash
+npx -y firebase-tools@latest use <PROJECT_ID>
+```
+
+### 3. Register the apps
+
+An **Apple (iOS)** app, matching `ios.bundleIdentifier` in `frontend/app.json`, and a
+**Web** app, which is what Expo Go and `yarn web` actually load:
+
+```bash
+npx -y firebase-tools@latest apps:create IOS "Café Journal iOS" \
+  --bundle-id com.christopherjtp.cafejournal --project <PROJECT_ID>
+
+npx -y firebase-tools@latest apps:create WEB "Café Journal Web" --project <PROJECT_ID>
+```
+
+List them again any time with `apps:list --project <PROJECT_ID>`.
+
+### 4. Enable sign-in providers
+
+`firebase.json` already declares Email/Password and Google. Deploy it — this also
+generates the OAuth clients Google Sign-in needs:
+
+```bash
+npx -y firebase-tools@latest deploy --only auth --project <PROJECT_ID>
+```
+
+### 5. Create Firestore and deploy the rules
+
+```bash
+npx -y firebase-tools@latest firestore:databases:list --project <PROJECT_ID>
+# if there's no database yet, pick a location and create one:
+npx -y firebase-tools@latest firestore:locations --project <PROJECT_ID>
+npx -y firebase-tools@latest firestore:databases:create "(default)" \
+  --location <LOCATION> --project <PROJECT_ID>
+
+npx -y firebase-tools@latest deploy --only firestore,storage --project <PROJECT_ID>
+```
+
+`firestore.rules` and `storage.rules` scope every read and write to the signed-in
+owner. **Review them before you share the app** — see the note at the end.
+
+### 6. Fill in `frontend/.env`
+
+```bash
+cp frontend/.env.example frontend/.env
+npx -y firebase-tools@latest apps:sdkconfig WEB --project <PROJECT_ID>
+```
+
+Copy the values into `frontend/.env`. The three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID`
+entries come from **Google Cloud Console → APIs & Services → Credentials**, created
+by the `deploy --only auth` in step 4.
+
+> `.env` is gitignored. **Create it before starting Metro** — Expo bakes
+> `EXPO_PUBLIC_*` vars in at startup, so edits while it's running require a restart.
+> None of these values are secrets; access is enforced by the security rules.
+
+### 7. Frontend dependencies
 
 ```bash
 cd frontend
@@ -45,41 +100,16 @@ yarn install
 
 ---
 
-## Every time — the easy way
+## Every time
 
 ```bash
-./dev-up.sh      # Docker + Mongo + backend + Metro, with a health check
-./dev-down.sh    # stop everything
-```
-Logs land in `.dev-logs/`. Prefer this over the manual steps below.
-
----
-
-## Every time — 3 terminals (manual)
-
-### Terminal 1 — MongoDB (Docker)
-
-```bash
-docker start journal-mongo
-# first time only:
-# docker run -d --name journal-mongo -p 27017:27017 mongo:7
+./dev-up.sh      # Expo web on :1101, with a config sanity check
+./dev-down.sh    # stop it
 ```
 
-### Terminal 2 — API (FastAPI / uvicorn)
+Logs land in `.dev-logs/`.
 
-```bash
-cd backend
-venv/bin/uvicorn server:app --host 0.0.0.0 --port 8001 --reload
-```
-
-Health check:
-```bash
-curl http://localhost:8001/api/    # → {"message":"Cafe Journal API"}
-```
-
-### Terminal 3 — Frontend (Expo)
-
-Pick one:
+Or by hand:
 
 **Browser** — quick UI check (no location features on web):
 ```bash
@@ -93,85 +123,50 @@ cd frontend
 yarn start      # scan the QR code in the Expo Go app
 ```
 
-For the phone, `frontend/.env` must point at your Mac's **LAN IP**, not `localhost`:
-```env
-EXPO_PUBLIC_BACKEND_URL=http://<your-mac-LAN-IP>:8001
-```
-Find the IP with `ipconfig getifaddr en0`.
+Unlike the old FastAPI setup, the phone no longer needs your Mac's LAN IP —
+Firebase is reachable from anywhere.
 
 ---
 
-## Backend test suite
+## Migrating the old MongoDB data
 
-This is an **integration** suite: it hits a live API and reads the base URL from
-`frontend/.env` (`EXPO_PUBLIC_BACKEND_URL`), so Mongo and the backend must be up first.
-
-It also registers more users than the `5/minute` cap on `POST /api/auth/register`
-allows. Start the backend with rate limiting off, or the last registers come back `429`:
+One-off, for café entries created before the Firebase move. Needs Mongo running
+(`docker start journal-mongo`) and `backend/venv/` still present.
 
 ```bash
-RATE_LIMIT_ENABLED=false ./dev-up.sh      # or, if starting uvicorn by hand:
-# RATE_LIMIT_ENABLED=false venv/bin/uvicorn server:app --host 0.0.0.0 --port 8001
+# 1. Export one user's cafés from Mongo
+backend/venv/bin/python scripts/export-mongo-cafes.py you@example.com
 
-cd backend && venv/bin/python -m pytest tests/ -q
+# 2. Register that email in the app (or sign in with Google), then import
+node scripts/import-cafes-to-firestore.mjs cafes-export.json you@example.com 'your-password'
 ```
 
-`RATE_LIMIT_ENABLED` defaults to `true`, so production and normal local dev are
-unaffected — only the test run opts out.
+The importer signs in as an ordinary user and writes through the real security
+rules — no service-account key involved. Base64 photos are uploaded to Cloud
+Storage and replaced by download URLs.
 
----
-
-## Test account (local dev only)
-
-A throwaway account already exists in the local `cafe_journal` database for quick sign-in:
-
-```
-Email:    smoketest@example.com
-Password: secret123
-```
-
-> ⚠️ Local development only. This is **not** a real credential — it exists only in your
-> local MongoDB. Do not reuse this password anywhere real.
-
----
-
-## Troubleshooting
-
-### "Failed to fetch" when logging in
-
-The UI loads but login fails. The browser couldn't reach the API — almost always a bad
-`EXPO_PUBLIC_BACKEND_URL`, **not** a backend problem. Check in this order:
-
-```bash
-# 1. Is the API actually up?
-curl http://localhost:8001/api/            # → {"message":"Cafe Journal API"}
-
-# 2. What URL is the app pointed at?
-grep EXPO_PUBLIC_BACKEND_URL frontend/.env
-
-# 3. Can that URL be reached?
-curl -m 4 -o /dev/null -w "%{http_code}\n" "<the URL from step 2>/api/"
-```
-
-**Most common cause: a stale LAN IP.** If `.env` holds something like
-`http://10.134.102.44:8001` from a previous network, it stops resolving once you switch
-Wi-Fi. Compare against your current IP (`ipconfig getifaddr en0`).
-
-- For **browser** (`yarn web`) → use `http://localhost:8001` (stable, never goes stale).
-- For **phone** (Expo Go) → must be your **current** LAN IP.
-
-**Then restart Metro.** Expo bakes `EXPO_PUBLIC_*` into the bundle at startup, so editing
-`.env` while Metro runs changes nothing.
+Once you've confirmed the data landed, `backend/` and the `journal-mongo`
+container can go.
 
 ---
 
 ## Gotchas
 
-- **Order matters:** Mongo → API → frontend. The API creates its Mongo indexes on startup,
-  so Mongo must be up first.
-- **The backend venv is `backend/venv/`** (no leading dot).
-- **Don't set `CI=1`** when running Metro yourself — it disables hot reload. Plain
-  `yarn web` / `yarn start` gives live reload.
-- **Nearby / geocoding is mobile-only** — intentionally disabled on web. Use Expo Go on a
-  real device to exercise it.
+- **Firestore documents cap at 1 MiB**, which is why photos live in Cloud Storage
+  rather than inline base64 the way Mongo held them.
+- **Google Sign-in on web** needs the serving domain under Authentication →
+  Authorized domains. `localhost` is already listed in `firebase.json`; add any
+  other host you serve from, **without** protocol or port.
+- **Nearby / geocoding is mobile-only** — intentionally disabled on web. Use Expo Go
+  on a real device to exercise it.
 - **Metro serving stale code?** `yarn start -c` clears the cache.
+- **Don't set `CI=1`** when running Metro yourself — it disables hot reload.
+
+---
+
+## Security rules
+
+`firestore.rules` and `storage.rules` are **prototype rules**. They're designed to be
+secure for a single-user-owns-their-own-data journal: every path is scoped to
+`request.auth.uid`, writes are shape- and range-validated, and everything else is
+denied by default. Review and verify them before sharing the app broadly.

@@ -1,43 +1,20 @@
-import { useCallback, useState } from "react";
+import { useMemo } from "react";
 import { View, Text, ScrollView, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useSafeTop } from "@/src/hooks/use-safe-top";
-import { useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { api } from "@/src/api/client";
+import { computeStats } from "@/src/api/client";
+import { useCafes } from "@/src/hooks/use-cafes";
 import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
-
-interface Stats {
-  total_cafes: number;
-  average_rating: number;
-  top_drink: string;
-  five_star_count: number;
-  by_month: { month: string; count: number }[];
-}
 
 export default function StatsScreen() {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const safeTop = useSafeTop();
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    try {
-      const s = await api.stats();
-      setStats(s);
-    } catch (e) {
-      console.warn(e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+  // The old /api/stats aggregation now runs on the live café list, so the
+  // numbers move the moment an entry is added or edited.
+  const { cafes, loading } = useCafes();
+  const stats = useMemo(() => computeStats(cafes), [cafes]);
 
   const maxMonth = stats ? Math.max(1, ...stats.by_month.map((m) => m.count)) : 1;
 

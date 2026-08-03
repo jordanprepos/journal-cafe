@@ -86,6 +86,8 @@ android-sdk/
 .env
 .env.*
 *.env
+# ...but the Firebase config template is documentation, not secrets.
+!.env.example
 credentials.json
 *.key
 .credentials
