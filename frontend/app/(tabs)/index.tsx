@@ -1,21 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
   Image,
-  RefreshControl,
   ScrollView,
   TextInput,
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useSafeTop } from "@/src/hooks/use-safe-top";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { api, Cafe } from "@/src/api/client";
+import { Cafe } from "@/src/api/client";
+import { useCafes } from "@/src/hooks/use-cafes";
 import { FACILITIES, Facility } from "@/src/constants/facilities";
 import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 import { distanceKm, formatDistance } from "@/src/utils/distance";
@@ -68,9 +68,8 @@ export default function Journal() {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const safeTop = useSafeTop();
-  const [cafes, setCafes] = useState<Cafe[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  // Live: Firestore pushes every add/edit/delete, so there's nothing to refetch.
+  const { cafes, loading } = useCafes();
   const [query, setQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("recent");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -89,24 +88,6 @@ export default function Journal() {
     setActiveTag(null);
     setFacilityFilter([]);
   }
-
-  const load = useCallback(async () => {
-    try {
-      const list = await api.listCafes();
-      setCafes(list);
-    } catch (e) {
-      console.warn(e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
 
   // Opt-in: only prompt for GPS when the user taps "Nearby".
   async function enableNearby() {
@@ -332,16 +313,6 @@ export default function Journal() {
           keyExtractor={(item) => item.id}
           columnWrapperStyle={styles.gridRow}
           contentContainerStyle={styles.grid}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => {
-                setRefreshing(true);
-                load();
-              }}
-              tintColor={colors.primary}
-            />
-          }
           ListEmptyComponent={
             cafes.length > 0 ? (
               // Has cafés, but the search/filters excluded them all.

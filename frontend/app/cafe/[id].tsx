@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   View,
   Text,
@@ -14,7 +14,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { api, Cafe } from "@/src/api/client";
+import { api } from "@/src/api/client";
+import { useCafe } from "@/src/hooks/use-cafes";
 import { facilityMeta } from "@/src/constants/facilities";
 import { cafeMapsUrl } from "@/src/utils/maps";
 import { formatPriceRange } from "@/src/utils/price";
@@ -50,22 +51,9 @@ export default function CafeDetail() {
   // devices report insets.top as 0 under edge-to-edge, which left the buttons
   // overlapping the status bar.
   const safeTop = useSafeTop();
-  const [cafe, setCafe] = useState<Cafe | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Live: an edit saved on another device updates this screen in place.
+  const { cafe, loading } = useCafe(id);
   const [deleting, setDeleting] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const c = await api.getCafe(id!);
-        setCafe(c);
-      } catch (e) {
-        console.warn(e);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [id]);
 
   async function handleDelete() {
     if (!cafe) return;

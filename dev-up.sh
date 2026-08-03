@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Starts MongoDB (Docker), the FastAPI backend, and the Expo web frontend together.
-# See RUNNING.md for the manual/one-time setup steps this assumes are already done.
+# Starts the Expo web frontend. Auth and data now come from Firebase, so there's
+# no local API or database to run — see RUNNING.md for the one-time setup.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,56 +20,21 @@ check_port_free() {
   fi
 }
 
-echo "==> Docker daemon"
-if ! docker info >/dev/null 2>&1; then
-  echo "    not running — launching Docker Desktop"
-  open -a Docker
-  for i in $(seq 1 60); do
-    docker info >/dev/null 2>&1 && break
-    sleep 2
-  done
-  docker info >/dev/null 2>&1 || { echo "    Docker daemon didn't come up in time" >&2; exit 1; }
-fi
-echo "    up"
-
-echo "==> MongoDB (journal-mongo)"
-if docker ps --format '{{.Names}}' | grep -qx journal-mongo; then
-  echo "    already running"
-elif docker ps -a --format '{{.Names}}' | grep -qx journal-mongo; then
-  check_port_free 27017 mongo
-  docker start journal-mongo >/dev/null
-  echo "    started"
-else
-  echo "    container doesn't exist yet — creating it"
-  check_port_free 27017 mongo
-  docker run -d --name journal-mongo -p 27017:27017 mongo:7 >/dev/null
-fi
-echo "    up on :27017"
-
-echo "==> Backend (uvicorn on :1100)"
-check_port_free 1100 backend
-# Rate limiting is on unless the caller opts out (RATE_LIMIT_ENABLED=false ./dev-up.sh),
-# which is what the backend test suite needs — see RUNNING.md.
-RATE_LIMIT_ENABLED="${RATE_LIMIT_ENABLED:-true}"
-echo "    rate limiting: $RATE_LIMIT_ENABLED"
-(cd "$ROOT_DIR/backend" && RATE_LIMIT_ENABLED="$RATE_LIMIT_ENABLED" nohup "$ROOT_DIR/backend/venv/bin/uvicorn" server:app --host 0.0.0.0 --port 1100 --reload > "$LOG_DIR/backend.log" 2>&1 &)
-
-printf "    waiting for health check"
-ok=0
-for i in $(seq 1 30); do
-  if curl -sf http://localhost:1100/api/ >/dev/null 2>&1; then
-    ok=1
-    break
-  fi
-  printf "."
-  sleep 1
-done
-echo ""
-if [ "$ok" -ne 1 ]; then
-  echo "    backend failed to come up — see $LOG_DIR/backend.log" >&2
+echo "==> Firebase config"
+if [ ! -f "$ROOT_DIR/frontend/.env" ]; then
+  echo "    frontend/.env is missing — copy frontend/.env.example and fill it in." >&2
   exit 1
 fi
-echo "    up — $(curl -s http://localhost:1100/api/)"
+missing=""
+for key in EXPO_PUBLIC_FIREBASE_API_KEY EXPO_PUBLIC_FIREBASE_PROJECT_ID \
+           EXPO_PUBLIC_FIREBASE_APP_ID EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET; do
+  grep -qE "^${key}=.+" "$ROOT_DIR/frontend/.env" || missing="$missing $key"
+done
+if [ -n "$missing" ]; then
+  echo "    frontend/.env is incomplete — empty:$missing" >&2
+  exit 1
+fi
+echo "    ok"
 
 echo "==> Frontend (yarn web on :1101)"
 check_port_free 1101 frontend
@@ -78,10 +43,7 @@ echo "    starting — Metro takes a few seconds to bundle, watch $LOG_DIR/front
 
 cat <<EOF
 
-All services launched:
-  MongoDB   localhost:27017
-  Backend   http://localhost:1100   (log: $LOG_DIR/backend.log)
-  Frontend  http://localhost:1101   (log: $LOG_DIR/frontend.log)
+Frontend  http://localhost:1101   (log: $LOG_DIR/frontend.log)
 
-Stop everything with: ./dev-down.sh
+Stop it with: ./dev-down.sh
 EOF

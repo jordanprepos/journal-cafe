@@ -1,79 +1,30 @@
-import { router } from "expo-router";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  Timestamp,
+  updateDoc,
+  type CollectionReference,
+} from "firebase/firestore";
+import {
+  deleteObject,
+  getDownloadURL,
+  ref,
+  uploadString,
+} from "firebase/storage";
 
 import type { Facility } from "@/src/constants/facilities";
-import { storage } from "@/src/utils/storage";
-
-const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
-const TOKEN_KEY = "cafe_journal_token";
-
-export async function getToken(): Promise<string | null> {
-  return await storage.secureGet<string>(TOKEN_KEY, "");
-}
-
-export async function setToken(token: string): Promise<void> {
-  await storage.secureSet(TOKEN_KEY, token);
-}
-
-export async function clearToken(): Promise<void> {
-  await storage.secureRemove(TOKEN_KEY);
-}
-
-async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const token = await getToken();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(opts.headers as Record<string, string> | undefined),
-  };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${BASE_URL}/api${path}`, { ...opts, headers });
-  if (!res.ok) {
-    // Expired/invalid session — send the user back to login. Auth endpoints are
-    // excluded: a 401 there means wrong credentials, shown inline instead.
-    if (res.status === 401 && !path.startsWith("/auth/")) {
-      await clearToken();
-      router.replace("/(auth)/login");
-    }
-    let detail = `Error ${res.status}`;
-    try {
-      const j = await res.json();
-      detail = j.detail || detail;
-    } catch {}
-    throw new Error(detail);
-  }
-  return (await res.json()) as T;
-}
-
-export const api = {
-  register: (email: string, password: string, name: string) =>
-    request<{ access_token: string; user: User }>("/auth/register", {
-      method: "POST",
-      body: JSON.stringify({ email, password, name }),
-    }),
-  login: (email: string, password: string) =>
-    request<{ access_token: string; user: User }>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }),
-  me: () => request<User>("/auth/me"),
-  listCafes: () => request<Cafe[]>("/cafes"),
-  getCafe: (id: string) => request<Cafe>(`/cafes/${id}`),
-  createCafe: (data: CafeInput) =>
-    request<Cafe>("/cafes", { method: "POST", body: JSON.stringify(data) }),
-  updateCafe: (id: string, data: Partial<CafeInput>) =>
-    request<Cafe>(`/cafes/${id}`, { method: "PUT", body: JSON.stringify(data) }),
-  deleteCafe: (id: string) =>
-    request<{ ok: boolean }>(`/cafes/${id}`, { method: "DELETE" }),
-  stats: () =>
-    request<{
-      total_cafes: number;
-      average_rating: number;
-      top_drink: string;
-      five_star_count: number;
-      by_month: { month: string; count: number }[];
-    }>("/stats"),
-};
+import { auth, db, storage as fbStorage } from "@/src/firebase/config";
 
 export type User = { id: string; email: string; name: string };
+
 export type CafeInput = {
   name: string;
   photos: string[];
@@ -93,13 +44,251 @@ export type CafeInput = {
   facilities?: Facility[];
   hospitality?: number;
 };
+
 export type Cafe = CafeInput & {
   id: string;
-  user_id: string;
   created_at: string;
-  // Optional to *send*, but the API always returns these — the server defaults
-  // them ([] / 0) even for cafés logged before the fields existed.
+  // Always present on read — `fromDoc` defaults them, so cafés written before
+  // these fields existed still deserialize.
   recommended_menu: string[];
   facilities: Facility[];
   hospitality: number;
+};
+
+export type Stats = {
+  total_cafes: number;
+  average_rating: number;
+  top_drink: string;
+  five_star_count: number;
+  by_month: { month: string; count: number }[];
+};
+
+/** Cafés live under the owner's document, so ownership is the path itself. */
+function cafesCol(uid: string): CollectionReference {
+  return collection(db, "users", uid, "cafes");
+}
+
+/**
+ * Firestore rejects `undefined` outright (the old JSON.stringify transport just
+ * dropped such keys). CafeForm guards its own payload, but the optional fields
+ * are typed `?: number | null`, so nothing stops a future caller passing one.
+ */
+function stripUndefined<T extends object>(o: T): T {
+  return Object.fromEntries(
+    Object.entries(o).filter(([, v]) => v !== undefined),
+  ) as T;
+}
+
+function requireUid(): string {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("You need to be signed in to do that.");
+  return uid;
+}
+
+function fromDoc(id: string, data: any): Cafe {
+  const ts = data.created_at;
+  return {
+    id,
+    name: data.name ?? "",
+    // A just-written doc reports created_at as null until the server timestamp
+    // lands, so fall back to now to keep sorting stable for the local echo.
+    created_at:
+      ts instanceof Timestamp ? ts.toDate().toISOString() : new Date().toISOString(),
+    photos: data.photos ?? [],
+    location_link: data.location_link ?? "",
+    address: data.address ?? "",
+    notes: data.notes ?? "",
+    rating: data.rating ?? 0,
+    favorite_drink: data.favorite_drink ?? "",
+    visited_date: data.visited_date ?? "",
+    tags: data.tags ?? [],
+    latitude: data.latitude ?? null,
+    longitude: data.longitude ?? null,
+    price_min: data.price_min ?? null,
+    price_max: data.price_max ?? null,
+    price_currency: data.price_currency ?? null,
+    recommended_menu: data.recommended_menu ?? [],
+    facilities: data.facilities ?? [],
+    hospitality: data.hospitality ?? 0,
+  };
+}
+
+// ── Photos ────────────────────────────────────────────────────────────────
+// The picker hands us `data:image/jpeg;base64,...` URIs. Those would blow
+// Firestore's 1 MiB document ceiling, so they go to Cloud Storage and the
+// document keeps only the download URL. Already-uploaded https URLs pass through.
+
+async function uploadPhotos(
+  uid: string,
+  cafeId: string,
+  photos: string[],
+): Promise<string[]> {
+  return await Promise.all(
+    photos.map(async (photo, idx) => {
+      if (!photo.startsWith("data:")) return photo;
+      const path = `users/${uid}/cafes/${cafeId}/${Date.now()}-${idx}.jpg`;
+      const objectRef = ref(fbStorage, path);
+      await uploadString(objectRef, photo, "data_url");
+      return await getDownloadURL(objectRef);
+    }),
+  );
+}
+
+/** Best-effort cleanup — a failed delete shouldn't fail the user's action. */
+async function deletePhotos(urls: string[]): Promise<void> {
+  await Promise.all(
+    urls.map(async (url) => {
+      try {
+        await deleteObject(ref(fbStorage, url));
+      } catch {
+        // Already gone, or not a Storage URL. Nothing to do.
+      }
+    }),
+  );
+}
+
+
+// ── Realtime ──────────────────────────────────────────────────────────────
+
+/**
+ * Live view of the signed-in user's cafés, newest first. Fires immediately with
+ * the cached list, then again on every local or remote change. Returns the
+ * unsubscribe function — call it on unmount.
+ */
+export function subscribeCafes(
+  onChange: (cafes: Cafe[]) => void,
+  onError?: (e: Error) => void,
+): () => void {
+  let uid: string;
+  try {
+    uid = requireUid();
+  } catch (e) {
+    onError?.(e as Error);
+    return () => {};
+  }
+  return onSnapshot(
+    query(cafesCol(uid), orderBy("created_at", "desc")),
+    (snap) => onChange(snap.docs.map((d) => fromDoc(d.id, d.data()))),
+    (e) => onError?.(e),
+  );
+}
+
+/** Live view of a single café. Calls back with null if it's deleted. */
+export function subscribeCafe(
+  id: string,
+  onChange: (cafe: Cafe | null) => void,
+  onError?: (e: Error) => void,
+): () => void {
+  let uid: string;
+  try {
+    uid = requireUid();
+  } catch (e) {
+    onError?.(e as Error);
+    return () => {};
+  }
+  return onSnapshot(
+    doc(cafesCol(uid), id),
+    (snap) => onChange(snap.exists() ? fromDoc(snap.id, snap.data()) : null),
+    (e) => onError?.(e),
+  );
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────
+
+/** Mirrors the aggregation the old /api/stats endpoint did server-side. */
+export function computeStats(cafes: Cafe[]): Stats {
+  const total = cafes.length;
+  const avg = total
+    ? Math.round((cafes.reduce((s, c) => s + c.rating, 0) / total) * 100) / 100
+    : 0;
+
+  const drinkCounts = new Map<string, number>();
+  for (const c of cafes) {
+    const drink = (c.favorite_drink ?? "").trim();
+    if (drink) drinkCounts.set(drink, (drinkCounts.get(drink) ?? 0) + 1);
+  }
+  const topDrink =
+    [...drinkCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+
+  const byMonth = new Map<string, number>();
+  for (const c of cafes) {
+    const date = c.visited_date ?? "";
+    if (date.length >= 7) {
+      const month = date.slice(0, 7);
+      byMonth.set(month, (byMonth.get(month) ?? 0) + 1);
+    }
+  }
+
+  return {
+    total_cafes: total,
+    average_rating: avg,
+    top_drink: topDrink,
+    five_star_count: cafes.filter((c) => c.rating === 5).length,
+    by_month: [...byMonth.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-6) // last 6 months
+      .map(([month, count]) => ({ month, count })),
+  };
+}
+
+// ── CRUD ──────────────────────────────────────────────────────────────────
+
+export const api = {
+  listCafes: async (): Promise<Cafe[]> => {
+    const uid = requireUid();
+    const snap = await getDocs(
+      query(cafesCol(uid), orderBy("created_at", "desc")),
+    );
+    return snap.docs.map((d) => fromDoc(d.id, d.data()));
+  },
+
+  getCafe: async (id: string): Promise<Cafe> => {
+    const uid = requireUid();
+    const snap = await getDoc(doc(cafesCol(uid), id));
+    if (!snap.exists()) throw new Error("Café not found.");
+    return fromDoc(snap.id, snap.data());
+  },
+
+  createCafe: async (data: CafeInput): Promise<Cafe> => {
+    const uid = requireUid();
+    // Create first so photos can be filed under the café's own id, then patch
+    // the URLs in. Keeps Storage paths tidy and cleanup a single folder delete.
+    const created = await addDoc(cafesCol(uid), {
+      ...stripUndefined(data),
+      photos: [],
+      created_at: serverTimestamp(),
+    });
+    const photos = await uploadPhotos(uid, created.id, data.photos ?? []);
+    if (photos.length) await updateDoc(created, { photos });
+    return { ...(data as Cafe), id: created.id, photos, created_at: new Date().toISOString() };
+  },
+
+  updateCafe: async (id: string, data: Partial<CafeInput>): Promise<void> => {
+    const uid = requireUid();
+    const target = doc(cafesCol(uid), id);
+    const patch: Record<string, unknown> = stripUndefined(data);
+
+    if (data.photos) {
+      const before = (await getDoc(target)).data()?.photos ?? [];
+      patch.photos = await uploadPhotos(uid, id, data.photos);
+      // Drop objects the user removed in this edit.
+      const kept = new Set(patch.photos as string[]);
+      await deletePhotos(before.filter((url: string) => !kept.has(url)));
+    }
+
+    await updateDoc(target, patch);
+  },
+
+  deleteCafe: async (id: string): Promise<void> => {
+    const uid = requireUid();
+    const target = doc(cafesCol(uid), id);
+    // Read the photo URLs first: deleting objects one by one keeps us inside the
+    // per-object Storage rule. Listing the folder would need `list` on the prefix,
+    // which the rules deliberately don't grant.
+    const urls: string[] = (await getDoc(target)).data()?.photos ?? [];
+    await deleteDoc(target);
+    await deletePhotos(urls);
+  },
+
+  stats: async (): Promise<Stats> => computeStats(await api.listCafes()),
 };

@@ -2,7 +2,9 @@
 
 A mobile journal for logging every café you visit — capture photos, paste a Google Maps share link, rate the experience, and look back on your coffee year.
 
-Built with **Expo (React Native)** + **FastAPI** + **MongoDB**.
+Built with **Expo (React Native)** + **Firebase** (Authentication, Cloud Firestore, Cloud Storage).
+
+Café entries sync in **realtime** — an edit on your phone lands on every other signed-in device without a refresh.
 
 > 🤖 **Built with [Emergent AI](https://emergent.sh)** — this project was designed, scaffolded, and developed with the help of Emergent's full-stack AI coding agent. From requirement gathering to backend API design, JWT auth, mobile UI, and deployment readiness checks, Emergent assisted at every step.
 
@@ -15,7 +17,7 @@ Built with **Expo (React Native)** + **FastAPI** + **MongoDB**.
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
-- [API Reference](#api-reference)
+- [Data Access](#data-access)
 - [Data Model](#data-model)
 - [Authentication Flow](#authentication-flow)
 - [Routing](#routing)
@@ -27,10 +29,11 @@ Built with **Expo (React Native)** + **FastAPI** + **MongoDB**.
 
 ## Features
 
-- 🔐 **Multi-user auth** — register, login, JWT-protected sessions (30-day expiry, bcrypt-hashed passwords)
+- 🔐 **Multi-user auth** — Firebase Authentication with Email/Password **and Google Sign-in**
+- ⚡ **Realtime sync** — Firestore listeners push every add, edit and delete to all your devices at once
 - 📔 **Journal feed** — browse every café you've logged with photo, rating, drink and date
 - 🔍 **Search** — filter by café name, address, or favourite drink
-- ➕ **Add / edit / delete** — multiple base64 photos, paste a Google Maps share link, star rating, notes, visit date, favourite drink
+- ➕ **Add / edit / delete** — multiple photos (stored in Cloud Storage), paste a Google Maps share link, star rating, notes, visit date, favourite drink
 - 📍 **Places tab** — list of all logged cafés, tap "Open in Google Maps" to launch the saved share link in the Maps app
 - 📊 **Stats** — total cafés visited, average rating, top drink, 5★ count, last-6-months bar chart
 - 👤 **Profile** — view account info, log out
@@ -45,20 +48,19 @@ Built with **Expo (React Native)** + **FastAPI** + **MongoDB**.
 - **Expo Router 6** — file-based routing
 - **React 19** + **TypeScript**
 - **expo-image-picker** — multi-photo upload
-- **expo-secure-store** — encrypted JWT storage (via `@/src/utils/storage`)
+- **expo-auth-session** — Google OAuth on device
+- **@react-native-async-storage/async-storage** — Firebase Auth session persistence
 - **react-native-safe-area-context**, **react-native-reanimated**, **react-native-gesture-handler**
 - **@expo/vector-icons** (Ionicons)
 
-### Backend
-- **FastAPI** (Python 3) — async REST API
-- **Motor** — async MongoDB driver
-- **PyJWT** — JWT signing (HS256)
-- **bcrypt** — password hashing
-- **Pydantic v2** — request/response validation
-- **Uvicorn** — ASGI server
+### Backend — Firebase
+No server to run or deploy. The app is a direct Firebase client.
 
-### Database
-- **MongoDB** — two collections: `users`, `cafes`
+- **Firebase Authentication** — Email/Password + Google Sign-in
+- **Cloud Firestore** — café documents, with `onSnapshot` realtime listeners
+- **Cloud Storage** — café photos, referenced from Firestore by download URL
+- **Security Rules** — `firestore.rules` / `storage.rules` enforce per-user access
+- **firebase JS SDK v12** — works in Expo Go and on web, no custom dev build needed
 
 ---
 
@@ -66,10 +68,14 @@ Built with **Expo (React Native)** + **FastAPI** + **MongoDB**.
 
 ```
 /app
-├── backend/                          ← FastAPI server
-│   ├── server.py                     ← All API routes (auth + cafes + stats)
-│   ├── requirements.txt
-│   └── .env                          ← MONGO_URL, DB_NAME, JWT_SECRET
+├── firebase.json                     ← Auth providers + rules wiring
+├── firestore.rules                   ← Per-user access rules for café docs
+├── firestore.indexes.json
+├── storage.rules                     ← Per-user access rules for photos
+│
+├── scripts/                          ← One-off MongoDB → Firestore migration
+│   ├── export-mongo-cafes.py
+│   └── import-cafes-to-firestore.mjs
 │
 ├── frontend/                         ← Expo React Native app
 │   ├── app/                          ← File-based routes (Expo Router)
@@ -92,7 +98,12 @@ Built with **Expo (React Native)** + **FastAPI** + **MongoDB**.
 │   │       └── edit/[id].tsx         ← Edit café
 │   │
 │   ├── src/                          ← Non-route code
-│   │   ├── api/client.ts             ← Fetch wrapper + endpoint methods
+│   │   ├── firebase/
+│   │   │   ├── config.ts             ← App / Auth / Firestore / Storage init
+│   │   │   ├── persistence.ts(.web)  ← AsyncStorage vs localStorage sessions
+│   │   │   └── google-signin.ts(.web)← expo-auth-session vs popup
+│   │   ├── api/client.ts             ← Firestore CRUD + realtime subscriptions
+│   │   ├── hooks/use-cafes.ts        ← useCafes() / useCafe() live hooks
 │   │   ├── context/AuthContext.tsx   ← Global auth state
 │   │   ├── components/CafeForm.tsx   ← Shared add/edit form
 │   │   ├── theme.ts                  ← Colors, spacing, fonts
@@ -101,7 +112,8 @@ Built with **Expo (React Native)** + **FastAPI** + **MongoDB**.
 │   ├── assets/                       ← Icons, splash
 │   ├── app.json                      ← Expo config + permissions
 │   ├── package.json
-│   └── .env                          ← EXPO_PUBLIC_BACKEND_URL, etc.
+│   ├── .env.example                  ← Template for the values below
+│   └── .env                          ← EXPO_PUBLIC_FIREBASE_*, etc.
 │
 ├── memory/
 │   ├── PRD.md                        ← Product spec
@@ -116,47 +128,28 @@ Built with **Expo (React Native)** + **FastAPI** + **MongoDB**.
 
 ### Prerequisites
 - **Node.js 18+** and **Yarn**
-- **Python 3.10+**
-- **MongoDB** running locally (or a connection string)
+- A **Firebase project** with Firestore, Storage and Authentication enabled
 - **Expo Go** app installed on your phone (for testing on device)
 
-### 1. Install dependencies
+**[RUNNING.md](RUNNING.md) is the full setup runbook** — CLI login, registering the
+iOS and Web apps, enabling providers, deploying rules, and filling in `.env`. The
+short version:
 
 ```bash
-# Backend
-cd backend
-pip install -r requirements.txt
+npx -y firebase-tools@latest login
+npx -y firebase-tools@latest use <PROJECT_ID>
+npx -y firebase-tools@latest deploy --only auth,firestore,storage
 
-# Frontend
-cd ../frontend
-yarn install
+cp frontend/.env.example frontend/.env    # then fill it in
+cd frontend && yarn install
 ```
 
-### 2. Configure environment
-
-Create `backend/.env`:
-```env
-MONGO_URL=mongodb://localhost:27017
-DB_NAME=test_database
-JWT_SECRET=change-me-in-production
-```
-
-Create `frontend/.env`:
-```env
-EXPO_PUBLIC_BACKEND_URL=http://localhost:8001
-```
-(Or use the preview URL provided by your environment.)
-
-### 3. Run the servers
+### Run it
 
 ```bash
-# Backend (port 8001)
-cd backend
-uvicorn server:app --host 0.0.0.0 --port 8001 --reload
-
-# Frontend (port 3000 — Metro bundler)
-cd frontend
-yarn start
+./dev-up.sh          # Expo web on :1101
+# or, by hand:
+cd frontend && yarn start
 ```
 
 Scan the QR code in **Expo Go** or open the web preview in your browser.
@@ -165,144 +158,131 @@ Scan the QR code in **Expo Go** or open the web preview in your browser.
 
 ## Environment Variables
 
-### Backend (`backend/.env`)
-
-| Variable | Purpose | Example |
-|---|---|---|
-| `MONGO_URL` | MongoDB connection string | `mongodb://localhost:27017` |
-| `DB_NAME` | Database name | `test_database` |
-| `JWT_SECRET` | HMAC key for signing tokens (keep secret!) | random 32+ char string |
-
-### Frontend (`frontend/.env`)
+All config lives in `frontend/.env` — see [`frontend/.env.example`](frontend/.env.example).
 
 | Variable | Purpose |
 |---|---|
-| `EXPO_PUBLIC_BACKEND_URL` | Base URL where the API is reachable (without `/api`) |
+| `EXPO_PUBLIC_FIREBASE_API_KEY` | Firebase Web API key |
+| `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN` | `<project-id>.firebaseapp.com` |
+| `EXPO_PUBLIC_FIREBASE_PROJECT_ID` | Firebase project ID |
+| `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` | Cloud Storage bucket for café photos |
+| `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Project number |
+| `EXPO_PUBLIC_FIREBASE_APP_ID` | Web app ID |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google OAuth client — used by `yarn web` |
+| `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | Google OAuth client — used by expo-auth-session on iOS |
+| `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` | Google OAuth client — used by expo-auth-session on Android |
 | `EXPO_PACKAGER_PROXY_URL`, `EXPO_PACKAGER_HOSTNAME` | Set automatically by the dev environment — **do not modify** |
 
-> **Note:** Backend routes are all prefixed with `/api`. The Kubernetes / preview ingress routes `/api/*` to port 8001 (FastAPI) and everything else to port 3000 (Metro).
+> **None of these are secrets.** They're public client identifiers; access control
+> lives entirely in `firestore.rules` and `storage.rules`. `.env` is still gitignored
+> so each developer points at their own project.
+
+Fetch the Firebase values with:
+
+```bash
+npx -y firebase-tools@latest apps:sdkconfig WEB --project <PROJECT_ID>
+```
 
 ---
 
-## API Reference
+## Data Access
 
-All endpoints are prefixed with `/api`. Protected endpoints require an `Authorization: Bearer <token>` header.
+There is no REST API. `frontend/src/api/client.ts` talks to Firestore directly and
+exposes two flavours of access.
 
-### Auth
-
-| Method | Path | Auth | Body | Returns |
-|---|---|---|---|---|
-| POST | `/api/auth/register` | ❌ | `{email, password, name}` | `{access_token, user}` |
-| POST | `/api/auth/login` | ❌ | `{email, password}` | `{access_token, user}` |
-| GET | `/api/auth/me` | ✅ | — | `{id, email, name}` |
-
-### Cafés
-
-| Method | Path | Auth | Body | Returns |
-|---|---|---|---|---|
-| GET | `/api/cafes` | ✅ | — | `Cafe[]` (only your own) |
-| POST | `/api/cafes` | ✅ | `CafeInput` | `Cafe` |
-| GET | `/api/cafes/{id}` | ✅ | — | `Cafe` |
-| PUT | `/api/cafes/{id}` | ✅ | partial `CafeInput` | `Cafe` |
-| DELETE | `/api/cafes/{id}` | ✅ | — | `{ok: true}` |
-
-### Stats
-
-| Method | Path | Auth | Returns |
-|---|---|---|---|
-| GET | `/api/stats` | ✅ | `{total_cafes, average_rating, top_drink, five_star_count, by_month[]}` |
-
-### `CafeInput` shape
+### Realtime (preferred)
 
 ```ts
-{
-  name: string;                // required
-  photos: string[];            // base64 data URIs
-  location_link: string;       // Google Maps share URL
-  address: string;
-  notes: string;
-  rating: number;              // 0–5
-  favorite_drink: string;
-  visited_date: string;        // "YYYY-MM-DD"
-}
+import { useCafes, useCafe } from "@/src/hooks/use-cafes";
+
+const { cafes, loading, error } = useCafes();   // live list, newest first
+const { cafe, loading } = useCafe(id);          // live single café, null once deleted
 ```
 
-### Example: create a café
+Both wrap Firestore `onSnapshot`, so screens re-render on any change — local,
+remote, or from another device — with no refetch and no focus listener.
 
-```bash
-curl -X POST https://your-app/api/cafes \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Blue Bottle",
-    "photos": [],
-    "location_link": "https://maps.app.goo.gl/abc",
-    "address": "Brooklyn, NY",
-    "notes": "Great oat latte",
-    "rating": 5,
-    "favorite_drink": "Iced oat latte",
-    "visited_date": "2026-02-10"
-  }'
+### One-shot
+
+```ts
+import { api, computeStats } from "@/src/api/client";
+
+await api.listCafes();              // Cafe[]
+await api.getCafe(id);              // Cafe
+await api.createCafe(input);        // uploads photos, returns the created Cafe
+await api.updateCafe(id, partial);  // uploads new photos, deletes removed ones
+await api.deleteCafe(id);           // deletes the doc and its Storage folder
+computeStats(cafes);                // the old /api/stats aggregation, client-side
 ```
+
+### Photos
+
+`CafeForm` still produces `data:image/jpeg;base64,...` URIs. On save, `client.ts`
+uploads each one to Cloud Storage and stores only the download URL — Firestore
+documents cap at **1 MiB**, which a single phone photo can exceed on its own.
 
 ---
 
 ## Data Model
 
-### `users` collection
-```js
-{
-  _id: ObjectId,                  // internal — never returned
-  id: "uuid-string",              // primary key used by app
-  email: "user@example.com",      // lowercased
-  name: "Jordan",
-  hashed_password: "$2b$12$...",  // bcrypt
-  created_at: "2026-02-10T...Z"
-}
-```
+Ownership is the document path, not a field. There is no `users` collection to
+maintain — Firebase Authentication owns identity.
 
-### `cafes` collection
+### `users/{uid}/cafes/{cafeId}`
+
 ```js
 {
-  _id: ObjectId,                  // internal — never returned
-  id: "uuid-string",
-  user_id: "owner-uuid",          // FK to users.id
   name: "Blue Bottle",
-  photos: ["data:image/jpeg;base64,...", ...],
+  created_at: Timestamp,                    // server-generated, set once
+  photos: ["https://firebasestorage.../migrated-0.jpg"],
   location_link: "https://maps.app.goo.gl/abc",
   address: "Brooklyn, NY",
   notes: "...",
-  rating: 5,
+  rating: 5,                                // 0–5
   favorite_drink: "Iced oat latte",
-  visited_date: "2026-02-10",
-  created_at: "2026-02-10T...Z"
+  visited_date: "2026-02-10",               // YYYY-MM-DD, for month grouping
+  tags: ["cosy"],
+  latitude: 40.7, longitude: -73.9,         // or null
+  price_min: 5, price_max: 9, price_currency: "USD",   // or null
+  recommended_menu: [],
+  facilities: ["wifi"],
+  hospitality: 4                            // 0 = unset
 }
 ```
 
+### Cloud Storage
+
+```
+users/{uid}/cafes/{cafeId}/{timestamp}-{index}.jpg
+```
+
 **Conventions:**
-- `_id` is always excluded from API responses (`projection={"_id": 0}`)
-- The app uses string UUIDs (`id`) as primary keys — never MongoDB ObjectIds
-- Photos are stored inline as base64 data URIs (simple, atomic; suitable for ~30 photos/café)
-- Dates are stored as ISO strings — `visited_date` uses `YYYY-MM-DD` for easy month grouping
+- Firestore's auto-generated document ID is the café's `id` — no separate UUID field
+- `created_at` is a server `Timestamp`; rules pin it so an update can't move it
+- The client converts it to an ISO string on read, so `Cafe.created_at` stays a `string`
+- Photos are Storage download URLs — never inline base64
 
 ---
 
 ## Authentication Flow
 
 ```
-1. User registers / logs in → backend hashes password (bcrypt) + signs JWT (HS256)
-2. JWT returned to client → stored in expo-secure-store (iOS Keychain / Android Keystore)
-3. Every protected request includes `Authorization: Bearer <token>`
-4. Backend validates JWT via FastAPI dependency `get_current_user`
-5. Every DB query filters by `user_id` → multi-user isolation enforced at query level
+1. User signs in with Email/Password or Google (expo-auth-session on device,
+   signInWithPopup on web)
+2. Firebase persists the session — AsyncStorage on native, localStorage on web
+3. onAuthStateChanged in AuthContext publishes the user on boot and on every change
+4. Firestore and Storage requests carry the Firebase ID token automatically
+5. firestore.rules / storage.rules scope every path to request.auth.uid
 ```
 
-JWT payload:
-```json
-{ "sub": "<user-uuid>", "exp": <unix-timestamp> }
-```
+Isolation is enforced by the security rules on Google's side, not by client-side
+query filtering — a signed-in user cannot read another user's cafés even with a
+hand-crafted request.
 
-Tokens expire after **30 days**. On app boot, the client calls `/api/auth/me` to verify the stored token is still valid; if not, it clears the token and shows the login screen.
+**The rules are prototype rules.** They're designed to be secure for a
+single-user-owns-their-own-data journal: every path is scoped to `request.auth.uid`,
+writes are shape- and range-validated, and everything else is denied by default.
+Review and verify them before sharing the app broadly.
 
 ---
 
@@ -335,37 +315,31 @@ Special filename rules:
 ### Useful commands
 
 ```bash
-# Backend hot-reload
-cd backend && uvicorn server:app --reload
-
 # Frontend Metro bundler
 cd frontend && yarn start
 
-# Lint frontend
-cd frontend && yarn lint
+# Lint + typecheck
+cd frontend && yarn lint && npx tsc --noEmit
 
-# Inspect the DB
-mongosh "mongodb://localhost:27017/test_database"
-> db.users.find({}, {hashed_password:0})
-> db.cafes.find()
+# Deploy rule / provider changes
+npx -y firebase-tools@latest deploy --only firestore,storage
+npx -y firebase-tools@latest deploy --only auth
 
-# Reset a user's password (admin script)
-python3 -c "
-import bcrypt
-from pymongo import MongoClient
-client = MongoClient('mongodb://localhost:27017')
-db = client['test_database']
-hashed = bcrypt.hashpw(b'newpassword', bcrypt.gensalt()).decode()
-db.users.update_one({'email': 'user@example.com'}, {'\$set': {'hashed_password': hashed}})
-"
+# Inspect the data
+open "https://console.firebase.google.com/project/<PROJECT_ID>/firestore"
+
+# List registered apps (iOS / Web) and re-fetch their config
+npx -y firebase-tools@latest apps:list --project <PROJECT_ID>
+npx -y firebase-tools@latest apps:sdkconfig WEB --project <PROJECT_ID>
 ```
+
+Always invoke the CLI via `npx -y firebase-tools@latest` so it stays current.
 
 ### Code conventions
 
-- All backend routes prefixed with `/api`
+- Access control lives in `firestore.rules` / `storage.rules`, never in client filtering
+- Platform splits use Metro's `.web.ts` suffix (see `src/firebase/`, `src/utils/storage/`)
 - All env values come from `.env` files — never hardcoded
-- All MongoDB reads exclude `_id` via projection
-- All datetimes use `datetime.now(timezone.utc)` (not `utcnow()`)
 - Every interactive UI element has a `testID` (kebab-case, by role)
 - React Native primitives only (no HTML/CSS files); styles via `StyleSheet.create()`
 
@@ -373,11 +347,15 @@ db.users.update_one({'email': 'user@example.com'}, {'\$set': {'hashed_password':
 
 ## Deployment
 
-This project runs in the Emergent preview environment. To ship to production:
+There's no server to deploy — only rules and client builds.
 
-1. Click **Publish** in the Emergent UI (top right)
-2. Configure deployment-time secrets (rotate `JWT_SECRET`!)
-3. For iOS/Android binaries, follow the build prompts in the Emergent dashboard
+1. **Rules and providers:** `npx -y firebase-tools@latest deploy --only auth,firestore,storage`
+2. **Authorized domains:** add your production host under Authentication → Authorized
+   domains (no protocol, no port) or Google Sign-in will fail on web
+3. **iOS/Android binaries:** build with EAS (`eas build`). The Apple app is already
+   registered in Firebase against `com.christopherjtp.cafejournal`
+4. **Review the security rules before opening the app up** — see
+   [Authentication Flow](#authentication-flow)
 
 ---
 
@@ -389,9 +367,9 @@ Ideas worth building next:
 - **Tags & categories** — espresso bar / cosy / work-friendly
 - **Favourites & wishlist** — places you want to visit
 - **Social** — follow friends and see their café feeds
-- **Cloud photo storage** — swap base64 for S3/Cloudinary URLs at scale
-- **Forgot-password flow** — email-based reset
-- **Offline mode** — local cache + sync on reconnect
+- **Forgot-password flow** — `sendPasswordResetEmail` from the Firebase Auth SDK
+- **Sign in with Apple** — required by App Store review once other social logins ship
+- **Offline mode** — Firestore persistent cache (memory-only on React Native today)
 - **Real map view** — render pins on an actual map (needs Google/Mapbox API key)
 
 ---
@@ -402,7 +380,8 @@ This project was built with the help of **[Emergent AI](https://emergent.sh)** �
 
 - 🗣 **Requirement gathering** — interactive scoping of features, integrations, and design choices
 - 🎨 **Design system** — generated the warm earthy theme + design guidelines
-- 🛠 **Backend scaffolding** — FastAPI server, MongoDB schema, JWT auth with bcrypt
+- 🛠 **Backend scaffolding** — the original FastAPI + MongoDB server and JWT auth,
+  since replaced by Firebase (see the git history for `backend/`)
 - 📱 **Mobile UI** — Expo Router file-based routing, screens, forms, navigation
 - 🧪 **Automated testing** — 27/27 backend integration tests passed on first run
 - 🔒 **Deployment health checks** — secret scanning, env validation, query optimization
