@@ -6,8 +6,6 @@ Built with **Expo (React Native)** + **Firebase** (Authentication, Cloud Firesto
 
 Café entries sync in **realtime** — an edit on your phone lands on every other signed-in device without a refresh.
 
-> 🤖 **Built with [Emergent AI](https://emergent.sh)** — this project was designed, scaffolded, and developed with the help of Emergent's full-stack AI coding agent. From requirement gathering to backend API design, JWT auth, mobile UI, and deployment readiness checks, Emergent assisted at every step.
-
 ---
 
 ## Table of Contents
@@ -44,6 +42,7 @@ Café entries sync in **realtime** — an edit on your phone lands on every othe
 ## Tech Stack
 
 ### Frontend
+
 - **Expo SDK 54** (React Native managed workflow)
 - **Expo Router 6** — file-based routing
 - **React 19** + **TypeScript**
@@ -54,6 +53,7 @@ Café entries sync in **realtime** — an edit on your phone lands on every othe
 - **@expo/vector-icons** (Ionicons)
 
 ### Backend — Firebase
+
 No server to run or deploy. The app is a direct Firebase client.
 
 - **Firebase Authentication** — Email/Password + Google Sign-in
@@ -127,15 +127,16 @@ No server to run or deploy. The app is a direct Firebase client.
 ## Getting Started
 
 ### Prerequisites
+
 - **Node.js 18+** and **Yarn**
 - A **Firebase project** with Firestore, Storage and Authentication enabled
 - **Expo Go** app installed on your phone (for testing on device)
 
-**[RUNNING.md](RUNNING.md) is the full setup runbook** — CLI login, registering the
+**[RUNNING.md](./RUNNING.md) is the full setup runbook** — CLI login, registering the
 iOS and Web apps, enabling providers, deploying rules, and filling in `.env`. The
 short version:
 
-```bash
+```
 npx -y firebase-tools@latest login
 npx -y firebase-tools@latest use my-cafe-journal
 npx -y firebase-tools@latest deploy --only auth,firestore,storage
@@ -146,7 +147,7 @@ cd frontend && yarn install
 
 ### Run it
 
-```bash
+```
 ./dev-up.sh          # Expo web on :1101
 # or, by hand:
 cd frontend && yarn start
@@ -158,19 +159,19 @@ Scan the QR code in **Expo Go** or open the web preview in your browser.
 
 ## Environment Variables
 
-All config lives in `frontend/.env` — see [`frontend/.env.example`](frontend/.env.example).
+All config lives in `frontend/.env` — see [`frontend/.env.example`](./frontend/.env.example).
 
-| Variable | Purpose |
-|---|---|
-| `EXPO_PUBLIC_FIREBASE_API_KEY` | Firebase Web API key |
-| `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN` | `<project-id>.firebaseapp.com` |
-| `EXPO_PUBLIC_FIREBASE_PROJECT_ID` | Firebase project ID |
-| `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` | Cloud Storage bucket for café photos |
-| `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Project number |
-| `EXPO_PUBLIC_FIREBASE_APP_ID` | Web app ID |
-| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google OAuth client — used by `yarn web` |
-| `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | Google OAuth client — used by expo-auth-session on iOS |
-| `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` | Google OAuth client — used by expo-auth-session on Android |
+| Variable                                            | Purpose                                                      |
+| --------------------------------------------------- | ------------------------------------------------------------ |
+| `EXPO_PUBLIC_FIREBASE_API_KEY`                      | Firebase Web API key                                         |
+| `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`                  | `<project-id>.firebaseapp.com`                               |
+| `EXPO_PUBLIC_FIREBASE_PROJECT_ID`                   | Firebase project ID                                          |
+| `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET`               | Cloud Storage bucket for café photos                         |
+| `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`          | Project number                                               |
+| `EXPO_PUBLIC_FIREBASE_APP_ID`                       | Web app ID                                                   |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`                  | Google OAuth client — used by `yarn web`                     |
+| `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`                  | Google OAuth client — used by expo-auth-session on iOS       |
+| `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`              | Google OAuth client — used by expo-auth-session on Android   |
 | `EXPO_PACKAGER_PROXY_URL`, `EXPO_PACKAGER_HOSTNAME` | Set automatically by the dev environment — **do not modify** |
 
 > **None of these are secrets.** They're public client identifiers; access control
@@ -179,7 +180,7 @@ All config lives in `frontend/.env` — see [`frontend/.env.example`](frontend/.
 
 Fetch the Firebase values with:
 
-```bash
+```
 npx -y firebase-tools@latest apps:sdkconfig WEB --project my-cafe-journal
 ```
 
@@ -192,7 +193,7 @@ exposes two flavours of access.
 
 ### Realtime (preferred)
 
-```ts
+```
 import { useCafes, useCafe } from "@/src/hooks/use-cafes";
 
 const { cafes, loading, error } = useCafes();   // live list, newest first
@@ -204,7 +205,7 @@ remote, or from another device — with no refetch and no focus listener.
 
 ### One-shot
 
-```ts
+```
 import { api, computeStats } from "@/src/api/client";
 
 await api.listCafes();              // Cafe[]
@@ -217,8 +218,7 @@ computeStats(cafes);                // the old /api/stats aggregation, client-si
 
 ### Photos
 
-`CafeForm` still produces `data:image/jpeg;base64,...` URIs. On save, `client.ts`
-uploads each one to Cloud Storage and stores only the download URL — Firestore
+`CafeForm` still produces `data:image/jpeg;base64,...` URIs. On save, `client.ts` uploads each one to Cloud Storage and stores only the download URL — Firestore
 documents cap at **1 MiB**, which a single phone photo can exceed on its own.
 
 ---
@@ -230,7 +230,7 @@ maintain — Firebase Authentication owns identity.
 
 ### `users/{uid}/cafes/{cafeId}`
 
-```js
+```
 {
   name: "Blue Bottle",
   created_at: Timestamp,                    // server-generated, set once
@@ -257,6 +257,7 @@ users/{uid}/cafes/{cafeId}/{timestamp}-{index}.jpg
 ```
 
 **Conventions:**
+
 - Firestore's auto-generated document ID is the café's `id` — no separate UUID field
 - `created_at` is a server `Timestamp`; rules pin it so an update can't move it
 - The client converts it to an ISO string on read, so `Cafe.created_at` stays a `string`
@@ -290,20 +291,21 @@ Review and verify them before sharing the app broadly.
 
 Routing is **file-based** via Expo Router.
 
-| File | Route |
-|---|---|
-| `app/index.tsx` | `/` (splash → redirect) |
-| `app/(auth)/login.tsx` | `/login` |
-| `app/(auth)/register.tsx` | `/register` |
-| `app/(tabs)/index.tsx` | `/` (Journal tab) |
-| `app/(tabs)/places.tsx` | `/places` |
-| `app/(tabs)/stats.tsx` | `/stats` |
-| `app/(tabs)/profile.tsx` | `/profile` |
-| `app/cafe/new.tsx` | `/cafe/new` |
-| `app/cafe/[id].tsx` | `/cafe/<uuid>` (dynamic) |
-| `app/cafe/edit/[id].tsx` | `/cafe/edit/<uuid>` (dynamic) |
+| File                      | Route                         |
+| ------------------------- | ----------------------------- |
+| `app/index.tsx`           | `/` (splash → redirect)       |
+| `app/(auth)/login.tsx`    | `/login`                      |
+| `app/(auth)/register.tsx` | `/register`                   |
+| `app/(tabs)/index.tsx`    | `/` (Journal tab)             |
+| `app/(tabs)/places.tsx`   | `/places`                     |
+| `app/(tabs)/stats.tsx`    | `/stats`                      |
+| `app/(tabs)/profile.tsx`  | `/profile`                    |
+| `app/cafe/new.tsx`        | `/cafe/new`                   |
+| `app/cafe/[id].tsx`       | `/cafe/<uuid>` (dynamic)      |
+| `app/cafe/edit/[id].tsx`  | `/cafe/edit/<uuid>` (dynamic) |
 
 Special filename rules:
+
 - `_layout.tsx` — wraps sibling routes (renders children inside `<Stack />` or `<Tabs />`)
 - `(folder)/` — **route group**, doesn't add a URL segment
 - `[param].tsx` — **dynamic segment**, captured by `useLocalSearchParams()`
@@ -314,7 +316,7 @@ Special filename rules:
 
 ### Useful commands
 
-```bash
+```
 # Frontend Metro bundler
 cd frontend && yarn start
 
@@ -351,11 +353,11 @@ There's no server to deploy — only rules and client builds.
 
 1. **Rules and providers:** `npx -y firebase-tools@latest deploy --only auth,firestore,storage`
 2. **Authorized domains:** add your production host under Authentication → Authorized
-   domains (no protocol, no port) or Google Sign-in will fail on web
+domains (no protocol, no port) or Google Sign-in will fail on web
 3. **iOS/Android binaries:** build with EAS (`eas build`). The Apple app is already
-   registered in Firebase against `com.christopherjtp.cafejournal`
+registered in Firebase against `com.christopherjtp.cafejournal`
 4. **Review the security rules before opening the app up** — see
-   [Authentication Flow](#authentication-flow)
+[Authentication Flow](#authentication-flow)
 
 ---
 
@@ -374,21 +376,12 @@ Ideas worth building next:
 
 ---
 
-## Credits
+## Notes
 
-This project was built with the help of **[Emergent AI](https://emergent.sh)** — a full-stack AI coding agent that assisted across the entire build:
-
-- 🗣 **Requirement gathering** — interactive scoping of features, integrations, and design choices
-- 🎨 **Design system** — generated the warm earthy theme + design guidelines
-- 🛠 **Backend scaffolding** — the original FastAPI + MongoDB server and JWT auth,
-  since replaced by Firebase (see the git history for `backend/`)
-- 📱 **Mobile UI** — Expo Router file-based routing, screens, forms, navigation
-- 🧪 **Automated testing** — 27/27 backend integration tests passed on first run
-- 🔒 **Deployment health checks** — secret scanning, env validation, query optimization
-
-If you want to build your own full-stack mobile app like this, give Emergent a try at [emergent.sh](https://emergent.sh).
-
----
+Early scaffolding and the first pass at the design system were bootstrapped with AI-assisted
+tooling. Everything from there — the Firebase migration off the original FastAPI/MongoDB
+backend, the security rules, the realtime data layer, routing, and the UI you see today —
+was built and refined by hand.
 
 ## License
 
