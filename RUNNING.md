@@ -197,12 +197,20 @@ npx -y eas-cli@latest project:info
 `.env` is gitignored, so it is **not** uploaded to cloud builds — and
 `src/firebase/config.ts` throws at startup when the Firebase vars are missing. A
 build with no env injected installs fine and then crashes on launch. Push the
-values to EAS once instead:
+values to EAS once instead.
+
+**EAS rejects empty values** — `env:push` reads the whole file and fails with
+`Variable value can not be empty` / `GraphQL request failed` on the first blank
+one. Until the three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` entries are filled in
+(setup step 6), push a filtered copy rather than `.env` itself:
 
 ```bash
 cd frontend
-npx -y eas-cli@latest env:push --path .env --environment development
-npx -y eas-cli@latest env:push --path .env --environment preview
+grep -Ev "^[A-Za-z_][A-Za-z0-9_]*=[[:space:]]*(\"\"|'')?[[:space:]]*$" .env > /tmp/eas.env
+cat /tmp/eas.env      # sanity-check: only lines with real values
+npx -y eas-cli@latest env:push --path /tmp/eas.env --environment development
+npx -y eas-cli@latest env:push --path /tmp/eas.env --environment preview
+rm /tmp/eas.env
 ```
 
 Choose visibility **plain** when prompted. These are public client identifiers,
@@ -216,8 +224,18 @@ Each build profile in `eas.json` declares the environment it reads
 Check it landed:
 
 ```bash
-npx -y eas-cli@latest env:list --environment preview     # expect all 9 vars
+npx -y eas-cli@latest env:list --environment preview
 ```
+
+Six variables is enough for `yarn web`, but **not for a native build**.
+`src/firebase/config.ts` only throws on the six `EXPO_PUBLIC_FIREBASE_*` values,
+so the web bundle runs on those alone. Native is stricter: `AuthProvider` calls
+`useGoogleSignIn` on every launch, and expo-auth-session's Google provider throws
+``Client Id property `androidClientId` must be defined…`` when the client IDs are
+undefined — so an APK built without them crashes on startup, before any sign-in
+screen. Fill in the three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values (setup step 6)
+and re-run the push before building; `env:push` updates variables that are
+already there.
 
 ### 3. Build
 
@@ -251,8 +269,10 @@ dependency or an `app.json` native setting changes.
   provisioning. Without one, add `"ios": { "simulator": true }` to a profile in
   `eas.json` and run the result on a macOS Simulator.
 - **The three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values are still blank** (setup
-  step 6). Google Sign-In fails in any build until those OAuth clients exist;
-  email/password sign-in works regardless.
+  step 6). On web that only costs you Google Sign-In — email/password still
+  works. On native it is fatal: `AuthProvider` builds the Google auth request at
+  launch, so an APK missing those values crashes on startup. Create the OAuth
+  clients and push the values before the first native build.
 - **No Firebase *Android* app is registered** — only iOS and Web. Android builds
   run, but native Google Sign-In needs an Android OAuth client registered against
   the EAS keystore's SHA-1, which `npx -y eas-cli@latest credentials` prints.
