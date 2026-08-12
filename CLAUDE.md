@@ -50,6 +50,22 @@ npx -y firebase-tools@latest deploy --only auth
 
 Always invoke the Firebase CLI through `npx -y firebase-tools@latest`.
 
+Native builds go through EAS on expo.dev — the project is managed / CNG, so there
+is no `ios/` or `android/` directory and prebuild happens in the cloud:
+
+```bash
+cd frontend
+yarn build:dev:android       # development build (expo-dev-client), APK
+yarn build:preview:android   # standalone internal build, APK
+yarn start --dev-client      # Metro for an installed development build
+```
+
+Same convention as Firebase: the CLI is always `npx -y eas-cli@latest`, never a
+local install. `EXPO_PUBLIC_*` values reach cloud builds through EAS environment
+variables, not `.env` (which is gitignored and therefore never uploaded) — each
+`eas.json` build profile names the environment it reads. See
+**[RUNNING.md](./RUNNING.md)** for linking the project and pushing those values.
+
 ## Layout
 
 ```
