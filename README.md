@@ -1,6 +1,6 @@
 # Café Journal ☕
 
-A mobile journal for logging every café you visit — capture photos, paste a Google Maps share link, rate the experience, and look back on your coffee year.
+A mobile journal for logging every café you visit — capture photos, record where it is, rate the experience, and look back on your coffee year.
 
 Built with **Expo (React Native)** + **Firebase** (Authentication, Cloud Firestore, Cloud Storage).
 
@@ -31,11 +31,12 @@ Café entries sync in **realtime** — an edit on your phone lands on every othe
 - ⚡ **Realtime sync** — Firestore listeners push every add, edit and delete to all your devices at once
 - 📔 **Journal feed** — browse every café you've logged with photo, rating, drink and date
 - 🔍 **Search** — filter by café name, address, or favourite drink
-- ➕ **Add / edit / delete** — multiple photos (stored in Cloud Storage), paste a Google Maps share link, star rating, notes, visit date, favourite drink
-- 📍 **Places tab** — list of all logged cafés, tap "Open in Google Maps" to launch the saved share link in the Maps app
+- ➕ **Add / edit / delete** — multiple photos (stored in Cloud Storage), address, price range, facilities, star rating, notes, visit date, favourite drink
+- 📍 **Places tab** — list of all logged cafés, tap "Open in Google Maps" to search Maps for the café by name + address
 - 📊 **Stats** — total cafés visited, average rating, top drink, 5★ count, last-6-months bar chart
-- 👤 **Profile** — view account info, log out
+- 👤 **Profile** — view account info, pick a Light / Dark / System theme, log out
 - 🎨 **Warm earthy design** — paper-cream backgrounds, terracotta accents, serif headings — feels like a real journal
+- 🌙 **Light and dark themes** — a full themed palette for both, following the system setting unless you override it
 
 ---
 
@@ -103,11 +104,14 @@ No server to run or deploy. The app is a direct Firebase client.
 │   │   │   ├── persistence.ts(.web)  ← AsyncStorage vs localStorage sessions
 │   │   │   └── google-signin.ts(.web)← expo-auth-session vs popup
 │   │   ├── api/client.ts             ← Firestore CRUD + realtime subscriptions
-│   │   ├── hooks/use-cafes.ts        ← useCafes() / useCafe() live hooks
+│   │   ├── hooks/                    ← use-cafes (live data), fonts, safe-area
 │   │   ├── context/AuthContext.tsx   ← Global auth state
-│   │   ├── components/CafeForm.tsx   ← Shared add/edit form
-│   │   ├── theme.ts                  ← Colors, spacing, fonts
-│   │   └── utils/storage/            ← Secure storage helper
+│   │   ├── components/               ← CafeForm, GoogleSignInButton, StarPicker
+│   │   ├── theme/                    ← Light/dark palette, tokens, shadows,
+│   │   │                               ThemeProvider, useThemedStyles
+│   │   ├── constants/                ← Currencies, facilities, tags, timezones
+│   │   └── utils/                    ← distance, geocode, maps, price,
+│   │                                   storage/(.web)
 │   │
 │   ├── assets/                       ← Icons, splash
 │   ├── app.json                      ← Expo config + permissions
@@ -235,7 +239,7 @@ maintain — Firebase Authentication owns identity.
   name: "Blue Bottle",
   created_at: Timestamp,                    // server-generated, set once
   photos: ["https://firebasestorage.../migrated-0.jpg"],
-  location_link: "https://maps.app.goo.gl/abc",
+  location_link: "https://maps.app.goo.gl/abc",   // legacy; see note below
   address: "Brooklyn, NY",
   notes: "...",
   rating: 5,                                // 0–5
@@ -262,6 +266,10 @@ users/{uid}/cafes/{cafeId}/{timestamp}-{index}.jpg
 - `created_at` is a server `Timestamp`; rules pin it so an update can't move it
 - The client converts it to an ISO string on read, so `Cafe.created_at` stays a `string`
 - Photos are Storage download URLs — never inline base64
+- `location_link` is **legacy**. New cafés don't store a pasted Maps link; "Open in
+  Google Maps" searches by name + address instead (`src/utils/maps.ts`). The field is
+  still read, and preferred when it holds a safe `http(s)` URL, so cafés saved before
+  the change keep opening their original link
 
 ---
 
@@ -343,7 +351,9 @@ Always invoke the CLI via `npx -y firebase-tools@latest` so it stays current.
 - Platform splits use Metro's `.web.ts` suffix (see `src/firebase/`, `src/utils/storage/`)
 - All env values come from `.env` files — never hardcoded
 - Every interactive UI element has a `testID` (kebab-case, by role)
-- React Native primitives only (no HTML/CSS files); styles via `StyleSheet.create()`
+- React Native primitives only (no HTML/CSS files); styles via `StyleSheet.create()`,
+  built from the theme with `useThemedStyles` — never a hardcoded color
+- `CLAUDE.md` covers the conventions in more depth, including the theme system
 
 ---
 

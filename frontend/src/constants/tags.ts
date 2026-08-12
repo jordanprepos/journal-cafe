@@ -12,7 +12,9 @@ export const PRESET_TAGS = [
   "Clean",
 ] as const;
 
-/** Matches the `max_length` on the backend's CafeCreate.tags. */
+/** Matches the `tags` list cap in `isValidCafe` (firestore.rules). Raising it
+ *  here alone makes writes fail the rules, which surfaces as a *permission*
+ *  error rather than a validation one — change both, then redeploy the rules. */
 export const MAX_TAGS = 20;
 
 const MAX_TAG_LENGTH = 24;
