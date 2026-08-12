@@ -227,15 +227,10 @@ Check it landed:
 npx -y eas-cli@latest env:list --environment preview
 ```
 
-Six variables is enough for `yarn web`, but **not for a native build**.
-`src/firebase/config.ts` only throws on the six `EXPO_PUBLIC_FIREBASE_*` values,
-so the web bundle runs on those alone. Native is stricter: `AuthProvider` calls
-`useGoogleSignIn` on every launch, and expo-auth-session's Google provider throws
-``Client Id property `androidClientId` must be defined…`` when the client IDs are
-undefined — so an APK built without them crashes on startup, before any sign-in
-screen. Fill in the three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values (setup step 6)
-and re-run the push before building; `env:push` updates variables that are
-already there.
+Six variables is a working state, not a broken one: `src/firebase/config.ts`
+only throws on the six `EXPO_PUBLIC_FIREBASE_*` values, so a build with just
+those launches and email/password sign-in works. Re-run the push once the Google
+client IDs exist — `env:push` updates variables that are already there.
 
 ### 3. Build
 
