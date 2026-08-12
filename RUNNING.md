@@ -245,6 +245,30 @@ EAS prints a URL to watch; the finished build is downloadable as a QR code from
 the same page. Android needs no account setup — EAS generates and stores a
 keystore for you on the first build.
 
+### 3b. Building from GitHub (expo.dev dashboard)
+
+The Expo project is **not** at the repo root — `package.json`, `app.json` and
+`eas.json` all live in `frontend/`. EAS defaults to cloning the repo and reading
+the root, so *Start a build from GitHub* fails immediately with:
+
+```
+Failed to read "/package.json".
+```
+
+Fix it once on expo.dev: **Project → Settings → GitHub → Base directory**, set to
+`/frontend`, then save and retry the build. Nothing in the repo can set this —
+it is stored against the GitHub connection.
+
+The same rule applies to EAS Workflows: they are discovered relative to the
+project root, so `create-production-builds.yml` lives at
+`frontend/.eas/workflows/`, not `.eas/workflows/` at the repo root. It declares
+no `on:` trigger, so it runs on demand:
+
+```bash
+cd frontend
+npx -y eas-cli@latest workflow:run create-production-builds.yml
+```
+
 ### 4. Run the development build
 
 Install the APK, then start Metro pointed at it:
