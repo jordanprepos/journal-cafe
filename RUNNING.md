@@ -197,12 +197,20 @@ npx -y eas-cli@latest project:info
 `.env` is gitignored, so it is **not** uploaded to cloud builds — and
 `src/firebase/config.ts` throws at startup when the Firebase vars are missing. A
 build with no env injected installs fine and then crashes on launch. Push the
-values to EAS once instead:
+values to EAS once instead.
+
+**EAS rejects empty values** — `env:push` reads the whole file and fails with
+`Variable value can not be empty` / `GraphQL request failed` on the first blank
+one. Until the three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` entries are filled in
+(setup step 6), push a filtered copy rather than `.env` itself:
 
 ```bash
 cd frontend
-npx -y eas-cli@latest env:push --path .env --environment development
-npx -y eas-cli@latest env:push --path .env --environment preview
+grep -Ev "^[A-Za-z_][A-Za-z0-9_]*=[[:space:]]*(\"\"|'')?[[:space:]]*$" .env > /tmp/eas.env
+cat /tmp/eas.env      # sanity-check: only lines with real values
+npx -y eas-cli@latest env:push --path /tmp/eas.env --environment development
+npx -y eas-cli@latest env:push --path /tmp/eas.env --environment preview
+rm /tmp/eas.env
 ```
 
 Choose visibility **plain** when prompted. These are public client identifiers,
@@ -216,8 +224,13 @@ Each build profile in `eas.json` declares the environment it reads
 Check it landed:
 
 ```bash
-npx -y eas-cli@latest env:list --environment preview     # expect all 9 vars
+npx -y eas-cli@latest env:list --environment preview
 ```
+
+Six variables is a working state, not a broken one: `src/firebase/config.ts`
+only throws on the six `EXPO_PUBLIC_FIREBASE_*` values, so a build with just
+those launches and email/password sign-in works. Re-run the push once the Google
+client IDs exist — `env:push` updates variables that are already there.
 
 ### 3. Build
 
