@@ -263,9 +263,12 @@ runner.
 Verify changes with `yarn lint`, `npx tsc --noEmit`, and by actually driving the
 app (Expo Go for anything touching location, photos, or native storage).
 
-`TEST_PLAN.md` is a manual test plan that **predates the Firebase migration** —
-its sections on JWT authorization and backend endpoints describe a backend that
-no longer exists. The UI flow cases are still broadly useful.
+`TEST_PLAN.md` is the manual test plan, written against the Firebase
+architecture: security rules, realtime propagation, photo upload, client-side
+stats, and the UI flows. Its rules and isolation sections (§4.3, §4.7) are the
+ones worth running after any change to `firestore.rules` — they can be driven in
+the Firebase console's Rules Playground without the app. Its risk register
+records known gaps rather than aspirations; keep it current when you close one.
 
 `test_result.md` opens with a protocol block marked DO NOT EDIT OR REMOVE.
 Leave it intact.

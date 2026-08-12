@@ -1,36 +1,71 @@
 # Café Journal — Test Plan
 
-Test plan for the Café Journal app (Expo/React Native + FastAPI + MongoDB).
-Covers the REST API, frontend flows, multi-user isolation, and a dedicated
-edge-case / risk register at the end.
+Test plan for the Café Journal app (Expo/React Native + Firebase). Covers
+authentication, café CRUD through Firestore, the security rules that enforce
+per-user isolation, client-side stats, frontend flows, and a risk register at
+the end.
+
+> **This plan was rewritten for the Firebase architecture.** The app previously
+> had a FastAPI + MongoDB backend with hand-rolled JWTs, and earlier revisions
+> of this document tested REST endpoints, Pydantic 422s, and token forgery. None
+> of that exists now: there is no server, no REST API, and no token this codebase
+> issues or validates. The client talks to Firebase directly and **the security
+> rules are the only access control**.
 
 ## 1. Scope
 
 | Area | In scope |
 |---|---|
-| Auth | register, login, `/auth/me`, JWT validation, session boot |
-| Café CRUD | create, list, detail, update, delete |
-| Stats | totals, averages, top drink, monthly grouping |
-| Isolation | per-user data separation across every endpoint |
+| Auth | register, login, Google sign-in, session persistence, boot routing |
+| Café CRUD | create, list, detail, update, delete — via `src/api/client.ts` |
+| Security rules | `firestore.rules` write validation; per-user isolation; `storage.rules` |
+| Realtime | `onSnapshot` propagation across devices/tabs |
+| Photos | Cloud Storage upload, orphan cleanup, size/type limits |
+| Stats | `computeStats` totals, averages, top drink, monthly grouping |
 | Frontend | journal, places, stats, profile, form, detail, auth screens |
-| Non-functional | input validation, security posture, payload limits |
+| Non-functional | rules posture, unbounded reads, error surfacing |
 
-Out of scope: push notifications, deployment/CI, cloud photo storage (roadmap items).
+Out of scope: push notifications, deployment/CI, EAS builds.
 
 ## 2. Test environment / global preconditions
 
-- Backend running on `http://localhost:8001`, MongoDB reachable (Docker `journal-mongo`).
-- `backend/.env` has `MONGO_URL`, `DB_NAME`, `JWT_SECRET`.
-- Frontend running via `expo start`; `EXPO_PUBLIC_BACKEND_URL` points at the backend.
-- A clean database (or unique random emails per run) to avoid cross-test contamination.
-- For UI cases: web browser at `http://localhost:8081` and/or Expo Go on device.
-- Two registered accounts **User A** and **User B** exist where isolation is tested.
+- A Firebase project with **Authentication** (Email/Password + Google),
+  **Cloud Firestore**, and **Cloud Storage** enabled. See
+  [RUNNING.md](./RUNNING.md).
+- **Rules deployed.** Most write-validation cases below fail meaninglessly if
+  `firestore.rules` on the project is stale:
+  `npx -y firebase-tools@latest deploy --only firestore,storage`
+- `frontend/.env` filled in. `EXPO_PUBLIC_*` is baked in at Metro start —
+  restart after editing.
+- Frontend running: `cd frontend && yarn start` (Expo Go) or `yarn web`.
+- Two accounts **User A** and **User B** where isolation is tested.
+- **Cloud Storage requires the Blaze plan.** If it isn't provisioned, cafés
+  without photos save fine and cafés with photos fail on upload — treat §4.6 as
+  blocked rather than failing.
+
+### Tooling note
+
+There is **no automated test suite** in this repo, so these are manual cases.
+Two mechanical aids are worth knowing:
+
+- Rules cases (§4.3, §4.7) can be driven in the Firebase console's **Rules
+  Playground** without touching the app.
+- They could also be automated with `@firebase/rules-unit-testing` against the
+  emulator. That is **not currently set up** — treat it as a suggestion, not a
+  precondition.
 
 ## 3. Conventions
 
 - **BDD steps** use Given / When / Then.
-- Auth endpoints return **422** for schema/validation failures (Pydantic), **400/401** for business-rule failures.
-- Protected café endpoints return **404** (not 403) for another user's resource — existence is intentionally not leaked.
+- Firebase Auth surfaces failures as `auth/*` codes. The client maps them
+  through `friendlyAuthError` (`src/context/AuthContext.tsx`); expected copy
+  below is the **mapped** string, since that is what a user sees.
+- **A rules rejection is a permission error, not a validation error.** Firestore
+  returns `permission-denied` whether the write was unauthorised *or* merely
+  malformed. Expect that code for every failed write in §4.3 — the distinction
+  between "not yours" and "wrong shape" is not observable from the client.
+- Cross-user reads fail with `permission-denied` rather than a "not found".
+  Existence is not leaked, but the code differs from the old REST 404.
 
 ---
 
@@ -41,940 +76,794 @@ Out of scope: push notifications, deployment/CI, cloud photo storage (roadmap it
 ---
 **TC-AUTH-01 — Register with valid credentials**
 - **Precondition:** `new@example.com` is not registered.
-- **Objective:** A new user can register and receive a token.
+- **Objective:** A new user can register and lands signed in.
 - **Type:** Positive
 - **Steps:**
-  - Given the email `new@example.com` is not in the `users` collection
-  - When I POST `/api/auth/register` with a valid email, a 6+ char password, and a non-empty name
-  - Then the request completes successfully
-- **Expected:** 200; body contains `access_token`, `token_type="bearer"`, and `user{id,email,name}`; `hashed_password` is **not** present; a `users` document is created with `email` lowercased.
+  - Given `new@example.com` has no Firebase Auth account
+  - When I submit the register form with a valid email, a 6+ char password, and a non-empty name
+  - Then `createUserWithEmailAndPassword` succeeds and `updateProfile` sets the display name
+- **Expected:** Routed into `(tabs)`; Profile shows the name and email. **No `users` collection document is created** — Firebase Authentication owns identity and ownership is the café document path.
 
 ---
-**TC-AUTH-02 — Register with an already-used email (same case)**
+**TC-AUTH-02 — Register with an already-used email**
 - **Precondition:** `taken@example.com` already registered.
-- **Objective:** Duplicate emails are rejected.
+- **Objective:** Duplicate emails are refused with readable copy.
 - **Type:** Negative
-- **Steps:**
-  - Given `taken@example.com` already exists
-  - When I POST `/api/auth/register` with the same email
-  - Then registration is refused
-- **Expected:** 400, detail `"Email already registered"`; no second document created.
+- **Expected:** `auth/email-already-in-use` → `"An account with that email already exists."` in `register-error`.
 
 ---
-**TC-AUTH-03 — Register with an already-used email (different case)**
-- **Precondition:** `user@example.com` already registered.
-- **Objective:** Email uniqueness is case-insensitive.
+**TC-AUTH-03 — Email casing is normalised by Firebase**
+- **Precondition:** Registered as `user@example.com`.
+- **Objective:** Confirm Firebase treats the address case-insensitively, so no second account is possible.
 - **Type:** Negative
 - **Steps:**
-  - Given `user@example.com` already exists
-  - When I POST `/api/auth/register` with `USER@EXAMPLE.COM`
-  - Then registration is refused because the email is lowercased before comparison
-- **Expected:** 400, `"Email already registered"`.
+  - When I register with `USER@EXAMPLE.COM`
+- **Expected:** `auth/email-already-in-use`. *(This is Firebase behaviour, not app logic — there is no lowercasing in this codebase.)*
 
 ---
-**TC-AUTH-04 — Register with password below minimum length**
+**TC-AUTH-04 — Password below minimum length**
 - **Precondition:** None.
-- **Objective:** Passwords shorter than 6 chars are rejected.
+- **Objective:** Short passwords are blocked client-side before any network call.
 - **Type:** Negative
 - **Steps:**
-  - Given a fresh email
-  - When I POST `/api/auth/register` with a 5-character password
-  - Then the schema validation fails
-- **Expected:** 422; error references `password` / `min_length`; no user created.
+  - When I submit a 5-character password
+- **Expected:** `"Password must be at least 6 characters."` (`app/(auth)/register.tsx`), **no request sent**. If the client guard were bypassed, Firebase returns `auth/weak-password` → `"Please choose a password of at least 6 characters."`
 
 ---
-**TC-AUTH-05 — Register with password at the boundary (exactly 6 chars)**
-- **Precondition:** None.
-- **Objective:** 6 characters is accepted (boundary).
+**TC-AUTH-05 — Password at the boundary (exactly 6 chars)**
 - **Type:** Positive
-- **Steps:**
-  - Given a fresh email
-  - When I POST `/api/auth/register` with a 6-character password
-  - Then registration succeeds
-- **Expected:** 200; token returned.
+- **Expected:** Accepted; registration succeeds.
 
 ---
-**TC-AUTH-06 — Register with empty name**
-- **Precondition:** None.
-- **Objective:** Name is required (min length 1).
+**TC-AUTH-06 — Any empty field**
+- **Objective:** Name, email and password are all required client-side.
+- **Type:** Negative
+- **Expected:** `"Please fill out every field."`; no request sent.
+
+---
+**TC-AUTH-07 — Malformed email**
+- **Type:** Negative
+- **Expected:** `auth/invalid-email` → `"That doesn't look like a valid email address."`
+
+---
+**TC-AUTH-08 — Whitespace-only name (edge)**
+- **Objective:** Confirm the client trims before validating.
 - **Type:** Negative
 - **Steps:**
-  - Given a fresh email
-  - When I POST `/api/auth/register` with `name = ""`
-  - Then validation fails
-- **Expected:** 422; error references `name`.
+  - When I submit `name = "   "` with a valid email and password
+- **Expected:** `!name.trim()` is truthy → `"Please fill out every field."`. Nothing reaches Firebase. *(The old backend accepted a single space because `min_length=1` counted it; that gap is gone with the backend.)*
 
 ---
-**TC-AUTH-07 — Register with a malformed email**
-- **Precondition:** None.
-- **Objective:** Email format is validated.
+**TC-AUTH-09 — Provider disabled on the project (edge)**
+- **Precondition:** Email/Password disabled in the Firebase console.
+- **Objective:** A misconfigured project produces actionable copy, not a raw code.
 - **Type:** Negative
-- **Steps:**
-  - Given a body with `email = "not-an-email"`
-  - When I POST `/api/auth/register`
-  - Then validation fails
-- **Expected:** 422; error references `email` / `value is not a valid email address`.
+- **Expected:** `auth/operation-not-allowed` → `"That sign-in method isn't enabled on this Firebase project."`
 
----
-**TC-AUTH-08 — Register with a reserved-TLD email (edge)**
-- **Precondition:** None.
-- **Objective:** `EmailStr` rejects reserved/special-use domains.
-- **Type:** Negative
-- **Steps:**
-  - Given a body with `email = "smoke@test.local"`
-  - When I POST `/api/auth/register`
-  - Then validation fails on the reserved TLD
-- **Expected:** 422; detail mentions "special-use or reserved name". *(Confirmed live.)*
-
----
-**TC-AUTH-09 — Register with a whitespace-only name (edge)**
-- **Precondition:** None.
-- **Objective:** Document that the API accepts a single-space name (backend does not `.strip()`).
-- **Type:** Negative (expected-to-expose-gap)
-- **Steps:**
-  - Given a fresh email
-  - When I POST `/api/auth/register` with `name = " "`
-  - Then the backend accepts it because `min_length=1` counts the space
-- **Expected (current):** 200, user stored with `name=" "`. **Desired:** rejected. See RISK-04.
-
----
-**TC-AUTH-10 — Concurrent duplicate registration (race)**
-- **Precondition:** `race@example.com` not registered.
-- **Objective:** The unique index prevents a double-insert under a race.
-- **Type:** Negative
-- **Steps:**
-  - Given two registration requests for `race@example.com` fire simultaneously
-  - When both pass the pre-insert existence check
-  - Then the second insert violates the unique index and is caught
-- **Expected:** Exactly one user created; the loser returns 400 `"Email already registered"` (not 500).
-
-### 4.2 Authentication — Login
+### 4.2 Authentication — Login, Google, session
 
 ---
 **TC-LOGIN-01 — Login with valid credentials**
-- **Precondition:** User A registered.
-- **Objective:** Correct credentials return a token.
+- **Type:** Positive
+- **Expected:** Signed in; `onAuthStateChanged` fires; routed to the Journal tab.
+
+---
+**TC-LOGIN-02 — Wrong password**
+- **Type:** Negative
+- **Expected:** `auth/invalid-credential` → `"That email or password isn't right."`
+
+---
+**TC-LOGIN-03 — Non-existent email**
+- **Objective:** Unknown email is indistinguishable from a wrong password.
+- **Type:** Negative
+- **Expected:** The same `"That email or password isn't right."` — the map deliberately gives `auth/user-not-found`, `auth/wrong-password` and `auth/invalid-credential` identical copy to avoid user enumeration. **Any divergence here is a defect.**
+
+---
+**TC-LOGIN-04 — Empty fields**
+- **Type:** Negative
+- **Expected:** `"Please enter email and password."` in `login-error`; no request sent.
+
+---
+**TC-LOGIN-05 — Too many failed attempts**
+- **Objective:** Firebase's own throttling is surfaced readably.
+- **Type:** Negative
+- **Steps:**
+  - When many wrong-password attempts are made in quick succession
+- **Expected:** `auth/too-many-requests` → `"Too many attempts. Please try again in a moment."` *(Firebase throttles server-side; the old backend had none — see the risk register.)*
+
+---
+**TC-LOGIN-06 — Offline / unreachable Firebase**
+- **Type:** Negative
+- **Expected:** `auth/network-request-failed` → `"Couldn't reach Firebase. Check your connection."`
+
+---
+**TC-GOOG-01 — Google sign-in on device**
+- **Precondition:** Expo Go; `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` / `_ANDROID_CLIENT_ID` set.
+- **Objective:** expo-auth-session flow completes and signs in.
+- **Type:** Positive
+- **Expected:** Signed in; `Profile` shows the Google display name.
+
+---
+**TC-GOOG-02 — Google sign-in dismissed**
+- **Objective:** Dismissing the sheet is not an error.
+- **Type:** Positive (edge)
+- **Expected:** `loginWithGoogle()` resolves **false**; no error copy rendered; user stays on Login.
+
+---
+**TC-GOOG-03 — Button disabled until the request is ready**
+- **Objective:** `googleReady` gates the button.
+- **Type:** Positive
+- **Expected:** `google-signin-button` is disabled until the OAuth request is prepared.
+
+---
+**TC-GOOG-04 — Google sign-in on web from an unauthorized domain**
+- **Precondition:** Serving host not listed under Authentication → Authorized domains.
+- **Type:** Negative
+- **Expected:** Popup flow fails. Add the host (no protocol, no port) to fix. Common first-run stumble.
+
+---
+**TC-SESS-01 — Session persists across app restarts**
+- **Objective:** Persistence is wired per platform.
 - **Type:** Positive
 - **Steps:**
-  - Given User A exists
-  - When I POST `/api/auth/login` with A's email and password
-  - Then login succeeds
-- **Expected:** 200; `access_token` + `user`.
+  - Given I signed in and fully quit the app
+  - When I reopen it
+  - Then `onAuthStateChanged` fires on boot with the persisted user
+- **Expected:** Lands on Journal without a login screen. AsyncStorage on native, localStorage on web (`src/firebase/persistence.ts(.web)`).
 
 ---
-**TC-LOGIN-02 — Login with wrong password**
-- **Precondition:** User A registered.
-- **Objective:** Wrong password is rejected without leaking which field was wrong.
-- **Type:** Negative
-- **Steps:**
-  - Given User A exists
-  - When I POST `/api/auth/login` with A's email and a wrong password
-  - Then login fails
-- **Expected:** 401, `"Incorrect email or password"`.
-
----
-**TC-LOGIN-03 — Login with a non-existent email**
-- **Precondition:** `ghost@example.com` never registered.
-- **Objective:** Unknown email is rejected with the same generic message.
-- **Type:** Negative
-- **Steps:**
-  - Given no account for `ghost@example.com`
-  - When I POST `/api/auth/login`
-  - Then login fails identically to a wrong password
-- **Expected:** 401, `"Incorrect email or password"` (message must match TC-LOGIN-02 to avoid user enumeration).
-
----
-**TC-LOGIN-04 — Login is case-insensitive on email**
-- **Precondition:** Registered as `mixed@example.com`.
-- **Objective:** Login works regardless of email casing.
+**TC-SESS-02 — Signed-out boot routes to Login**
 - **Type:** Positive
 - **Steps:**
-  - Given the account was created with `mixed@example.com`
-  - When I POST `/api/auth/login` with `MIXED@EXAMPLE.COM`
-  - Then the email is lowercased and matched
-- **Expected:** 200; token returned.
+  - Given no persisted session
+  - When the app boots
+  - Then `onAuthStateChanged` fires once with `null`
+- **Expected:** `splash-loading` while `loading` is true, then redirect to `/(auth)/login`.
 
 ---
-**TC-LOGIN-05 — Login with missing password field**
-- **Precondition:** None.
-- **Objective:** Schema requires password.
-- **Type:** Negative
-- **Steps:**
-  - Given a body with only `email`
-  - When I POST `/api/auth/login`
-  - Then validation fails
-- **Expected:** 422.
-
-### 4.3 Session & JWT authorization
+**TC-SESS-03 — Logout clears the session**
+- **Type:** Positive
+- **Expected:** `logout-button` → `signOut` → redirect to Login; a restart does not restore the session.
 
 ---
-**TC-JWT-01 — Access a protected route with a valid token**
-- **Precondition:** Valid token for User A.
-- **Objective:** Valid Bearer token grants access.
+**TC-SESS-04 — Display name after email/password register (edge)**
+- **Objective:** Cover the explicit `setUser` after `updateProfile`.
 - **Type:** Positive
 - **Steps:**
-  - Given a valid token
-  - When I GET `/api/auth/me` with `Authorization: Bearer <token>`
-  - Then the user profile is returned
-- **Expected:** 200; `{id,email,name}`.
+  - Given I register with a name
+  - When registration completes
+  - Then the name shows immediately on Profile
+- **Expected:** Name present without a reload. `updateProfile` does **not** re-fire `onAuthStateChanged`, so `AuthContext` publishes the user itself; a regression here shows as a blank/derived name until restart.
+
+### 4.3 Firestore rules — write validation
+
+Every case: authenticated as User A, writing to `users/{A.uid}/cafes`. A rejection
+surfaces as **`permission-denied`**, never a field-level message.
 
 ---
-**TC-JWT-02 — Access a protected route with no Authorization header**
-- **Precondition:** None.
-- **Objective:** Missing credentials are rejected.
+**TC-RULE-01 — Create with all fields**
+- **Type:** Positive
+- **Expected:** Write succeeds; document ID becomes the café's `id`; `created_at` is a server `Timestamp`.
+
+---
+**TC-RULE-02 — Create missing a required key**
+- **Objective:** `hasAll` covers the ten required fields.
 - **Type:** Negative
 - **Steps:**
-  - Given no `Authorization` header
-  - When I GET `/api/cafes`
-  - Then access is denied
-- **Expected:** 401, `"Not authenticated"` (HTTPBearer rejects the missing header). *(Confirmed live.)*
+  - When a write omits any of `name`, `created_at`, `photos`, `location_link`, `address`, `notes`, `rating`, `favorite_drink`, `visited_date`, `tags`
+- **Expected:** `permission-denied`.
 
 ---
-**TC-JWT-03 — Access with a malformed token**
-- **Precondition:** None.
-- **Objective:** Garbage tokens are rejected.
+**TC-RULE-03 — Empty name**
+- **Type:** Negative
+- **Expected:** `permission-denied` (`name.size() > 0`).
+
+---
+**TC-RULE-04 — Name over 200 chars**
+- **Type:** Negative
+- **Expected:** `permission-denied`. Boundary: exactly 200 succeeds, 201 fails.
+
+---
+**TC-RULE-05 — Rating out of range or non-integer**
 - **Type:** Negative
 - **Steps:**
-  - Given `Authorization: Bearer not.a.jwt`
-  - When I GET `/api/cafes`
-  - Then decoding fails
-- **Expected:** 401, `"Invalid token"`. *(Confirmed live.)*
+  - When `rating` is `-1`, `6`, or `4.5`
+- **Expected:** `permission-denied` for each (`is int`, `>= 0`, `<= 5`). Boundary: 0 and 5 succeed.
 
 ---
-**TC-JWT-04 — Token signed with a different secret**
-- **Precondition:** A token forged with a wrong HS256 key.
-- **Objective:** Signature verification blocks forged tokens.
+**TC-RULE-06 — Notes over 20000 chars**
+- **Type:** Negative
+- **Expected:** `permission-denied`.
+
+---
+**TC-RULE-07 — List caps**
+- **Objective:** Each list cap is enforced independently.
 - **Type:** Negative
 - **Steps:**
-  - Given a token signed with `"wrong-secret"`
-  - When I GET `/api/auth/me`
-  - Then signature verification fails
-- **Expected:** 401, `"Invalid token"`.
+  - When `photos` > 20, `tags` > 20, `facilities` > 20, or `recommended_menu` > 50
+- **Expected:** `permission-denied` for each. `MAX_TAGS` in `src/constants/tags.ts` mirrors the tags cap — raising one without the other breaks writes.
 
 ---
-**TC-JWT-05 — Expired token (edge)**
-- **Precondition:** A token with `exp` in the past (or `JWT_EXPIRE_DAYS` temporarily set negative).
-- **Objective:** Expired tokens are rejected distinctly.
+**TC-RULE-08 — Coordinates out of range**
 - **Type:** Negative
 - **Steps:**
-  - Given a token whose `exp` has passed
-  - When I GET `/api/cafes`
-  - Then the expiry branch triggers
-- **Expected:** 401, `"Token expired"`.
+  - When `latitude` is outside -90..90 or `longitude` outside -180..180
+- **Expected:** `permission-denied`. Explicit `null` is accepted (the field is optional).
 
 ---
-**TC-JWT-06 — Valid token for a since-deleted user**
-- **Precondition:** User A's token, then A's `users` document deleted.
-- **Objective:** Tokens for missing users are rejected.
+**TC-RULE-09 — Price currency format**
 - **Type:** Negative
 - **Steps:**
-  - Given a still-unexpired token for User A
-  - And A's user document has been deleted
-  - When I GET `/api/cafes`
-  - Then the user lookup fails
-- **Expected:** 401, `"User not found"`.
+  - When `price_currency` is `"usd"`, `"US"`, or `"USDD"`
+- **Expected:** `permission-denied` (`^[A-Z]{3}$`). `"USD"` and `null` succeed.
 
 ---
-**TC-JWT-07 — Token missing the `sub` claim**
-- **Precondition:** A validly-signed token with no `sub`.
-- **Objective:** Tokens without a subject are rejected.
+**TC-RULE-10 — `created_at` cannot move on update**
+- **Objective:** The pin holds against a client that tries to rewrite it.
 - **Type:** Negative
 - **Steps:**
-  - Given a signed token whose payload omits `sub`
-  - When I GET `/api/auth/me`
-  - Then the missing-subject branch triggers
-- **Expected:** 401, `"Invalid token"`.
+  - Given café X exists with a server `created_at`
+  - When an update sends a different `created_at`
+- **Expected:** `permission-denied`; stored value unchanged. This is what keeps list ordering stable.
 
 ---
-**TC-JWT-08 — Token remains valid after password change (edge / risk)**
-- **Precondition:** User A logged in (token T); A's password later changed server-side.
-- **Objective:** Document that there is no token revocation.
-- **Type:** Negative (expected-to-expose-gap)
+**TC-RULE-11 — Update is validated like a create**
+- **Objective:** A partial update can't leave a document the app can't read back.
+- **Type:** Negative
 - **Steps:**
-  - Given token T was issued before the password change
-  - When I use T after the password is changed
-  - Then it still works because tokens are stateless with a 30-day life
-- **Expected (current):** 200. **Desired:** invalidated. See RISK-06.
+  - When an update sets `rating = 9` on an otherwise valid café
+- **Expected:** `permission-denied`. Rules run `isValidCafe` on **create and update** — a "valid patch, invalid result" write is refused.
+
+---
+**TC-RULE-12 — Writing outside the cafés path**
+- **Objective:** Default-deny covers everything unmatched.
+- **Type:** Negative
+- **Steps:**
+  - When a write targets `users/{A.uid}` directly, or any other collection
+- **Expected:** `permission-denied`.
+
+---
+**TC-RULE-13 — Adding a field without redeploying rules (edge / process)**
+- **Objective:** Reproduce the failure mode that looks like an auth bug.
+- **Type:** Negative (expected-to-expose-trap)
+- **Steps:**
+  - Given a new café field is added to `CafeInput` and `CafeForm` but **not** to `isValidCafe`
+  - When any café is saved
+  - Then the rules reject the now-unknown shape
+- **Expected:** **Every write fails with `permission-denied`**, which reads as a sign-in problem rather than a validation one. The fix is deploying the rules. See RISK-04.
 
 ### 4.4 Café — Create
 
 ---
-**TC-CAFE-01 — Create a café with all fields**
+**TC-CAFE-01 — Create with all fields**
 - **Precondition:** Authenticated User A.
-- **Objective:** A fully-populated café is created and owned by A.
+- **Type:** Positive
+- **Expected:** Document written under `users/{A.uid}/cafes/{auto-id}`; `created_at` server-generated; returned `Cafe.id` is the document ID. No `user_id` field — **ownership is the path**.
+
+---
+**TC-CAFE-02 — Create with minimal input**
+- **Objective:** `fromDoc` defaults fill everything absent on read-back.
+- **Type:** Positive
+- **Expected:** `photos=[]`, strings `""`, `rating=0`, `tags=[]`, `facilities=[]`, `recommended_menu=[]`, `hospitality=0`, nullable numbers `null`.
+
+---
+**TC-CAFE-03 — Empty name is blocked client-side**
+- **Type:** Negative
+- **Expected:** `"Please give your café a name."` in `form-error`; no write attempted. (The rules would also refuse it — see TC-RULE-03.)
+
+---
+**TC-CAFE-04 — Price validation in the form**
+- **Type:** Negative
+- **Steps:**
+  - When min or max is negative/non-numeric → `"Price must be a number of 0 or more."`
+  - When max < min → `"Maximum price can't be lower than the minimum."`
+  - When the currency isn't 3 letters → `"Enter a 3-letter currency code (e.g. EUR) for the price."`
+- **Expected:** Each blocks the save with the quoted copy.
+
+---
+**TC-CAFE-05 — `undefined` never reaches Firestore**
+- **Objective:** Cover `stripUndefined`.
+- **Type:** Positive (regression guard)
+- **Steps:**
+  - When an optional field is left unset
+- **Expected:** The key is omitted or written as `null`, never `undefined`. Firestore **rejects `undefined` outright**, so a regression here throws at write time rather than storing a bad value.
+
+---
+**TC-CAFE-06 — `created_at` local echo before the server timestamp lands (edge)**
+- **Objective:** Cover the `fromDoc` fallback.
 - **Type:** Positive
 - **Steps:**
-  - Given A is authenticated
-  - When I POST `/api/cafes` with name, photos, location_link, address, notes, rating, favorite_drink, visited_date
-  - Then the café is created
-- **Expected:** 200; response echoes fields; `id` (UUID), `user_id == A.id`, `created_at` set; `_id` absent.
+  - Given a café was just created
+  - When the local snapshot fires before the server `Timestamp` resolves
+  - Then `created_at` reads as `null` and `fromDoc` substitutes "now"
+- **Expected:** The new café sorts to the top rather than jumping position when the server value arrives.
 
 ---
-**TC-CAFE-02 — Create a café with only a name (minimal)**
-- **Precondition:** Authenticated User A.
-- **Objective:** Optional fields default correctly.
-- **Type:** Positive
-- **Steps:**
-  - Given A is authenticated
-  - When I POST `/api/cafes` with only `{name}`
-  - Then defaults apply
-- **Expected:** 200; `photos=[]`, strings default `""`, `rating=0`, `visited_date` defaults to today's `YYYY-MM-DD`.
-
----
-**TC-CAFE-03 — Create a café with no name**
-- **Precondition:** Authenticated User A.
-- **Objective:** Name is required.
+**TC-CAFE-07 — Create while signed out**
 - **Type:** Negative
-- **Steps:**
-  - Given A is authenticated
-  - When I POST `/api/cafes` with `name = ""` (or omitted)
-  - Then validation fails
-- **Expected:** 422.
+- **Expected:** `requireUid()` throws `"You need to be signed in to do that."` before any network call.
 
----
-**TC-CAFE-04 — Create with rating below 0**
-- **Precondition:** Authenticated User A.
-- **Objective:** Rating lower bound enforced.
-- **Type:** Negative
-- **Steps:**
-  - Given A is authenticated
-  - When I POST `/api/cafes` with `rating = -1`
-  - Then validation fails
-- **Expected:** 422 (`ge=0`).
-
----
-**TC-CAFE-05 — Create with rating above 5**
-- **Precondition:** Authenticated User A.
-- **Objective:** Rating upper bound enforced.
-- **Type:** Negative
-- **Steps:**
-  - Given A is authenticated
-  - When I POST `/api/cafes` with `rating = 6`
-  - Then validation fails
-- **Expected:** 422 (`le=5`).
-
----
-**TC-CAFE-06 — Create with rating at boundaries (0 and 5)**
-- **Precondition:** Authenticated User A.
-- **Objective:** Boundary ratings accepted.
-- **Type:** Positive
-- **Steps:**
-  - Given A is authenticated
-  - When I create one café with `rating=0` and another with `rating=5`
-  - Then both succeed
-- **Expected:** 200 for both.
-
----
-**TC-CAFE-07 — Create with empty visited_date defaults to today**
-- **Precondition:** Authenticated User A.
-- **Objective:** Empty date falls back to server "today".
-- **Type:** Positive (edge)
-- **Steps:**
-  - Given A is authenticated
-  - When I POST `/api/cafes` with `visited_date = ""`
-  - Then the server substitutes today's date
-- **Expected:** 200; `visited_date == today (YYYY-MM-DD)`.
-
----
-**TC-CAFE-08 — Create with a non-date string in visited_date (edge / risk)**
-- **Precondition:** Authenticated User A.
-- **Objective:** Expose that `visited_date` has no format validation.
-- **Type:** Negative (expected-to-expose-gap)
-- **Steps:**
-  - Given A is authenticated
-  - When I POST `/api/cafes` with `visited_date = "banana"`
-  - Then the backend stores it verbatim
-- **Expected (current):** 200, stored as `"banana"`; later silently excluded from stats month grouping. **Desired:** 422 / format validation. See RISK-01.
-
----
-**TC-CAFE-09 — Create with many large photos (edge)**
-- **Precondition:** Authenticated User A.
-- **Objective:** Behaviour near MongoDB's 16 MB document ceiling.
-- **Type:** Negative (boundary/limits)
-- **Steps:**
-  - Given A is authenticated
-  - When I POST `/api/cafes` with enough base64 photos to approach 16 MB
-  - Then the write is attempted
-- **Expected:** Documented limit — succeeds under 16 MB, fails (server error) at/over the ceiling. See RISK-08.
-
----
-**TC-CAFE-10 — Create without authentication**
-- **Precondition:** None.
-- **Objective:** Café creation requires a token.
-- **Type:** Negative
-- **Steps:**
-  - Given no `Authorization` header
-  - When I POST `/api/cafes`
-  - Then access is denied
-- **Expected:** 401, `"Not authenticated"`.
-
-### 4.5 Café — Read (list & detail)
+### 4.5 Café — Read, realtime, update, delete
 
 ---
 **TC-READ-01 — List returns only the caller's cafés, newest first**
-- **Precondition:** User A has ≥2 cafés created at different times.
-- **Objective:** List is scoped and sorted by `created_at` desc.
 - **Type:** Positive
-- **Steps:**
-  - Given A owns multiple cafés
-  - When I GET `/api/cafes` as A
-  - Then only A's cafés are returned, newest first
-- **Expected:** 200; array sorted by `created_at` descending.
+- **Expected:** `orderBy("created_at", "desc")`; only documents beneath the caller's UID are reachable at all.
 
 ---
-**TC-READ-02 — List payload includes only the cover photo**
-- **Precondition:** User A has a café with ≥2 photos.
-- **Objective:** Verify the `$slice: 1` projection on the list endpoint.
-- **Type:** Positive
-- **Steps:**
-  - Given a café created with 3 photos
-  - When I GET `/api/cafes`
-  - Then each café carries only its first photo
-- **Expected:** 200; `photos.length == 1` in the list even though 3 were stored. *(Confirmed live.)*
-
----
-**TC-READ-03 — Detail returns the full photo array**
-- **Precondition:** Café with ≥2 photos.
-- **Objective:** Detail is not sliced.
+**TC-READ-02 — List returns full photo arrays**
+- **Objective:** Confirm the old cover-photo projection is gone.
 - **Type:** Positive
 - **Steps:**
   - Given a café with 3 photos
-  - When I GET `/api/cafes/{id}`
-  - Then all photos are returned
-- **Expected:** 200; `photos.length == 3`.
+  - When the journal list loads
+- **Expected:** All 3 URLs present. The `$slice: 1` projection was a MongoDB optimisation for inline base64; Firestore stores only short download URLs, so the list carries them all.
 
 ---
-**TC-READ-04 — Get a non-existent café**
-- **Precondition:** Authenticated User A; random UUID not in DB.
-- **Objective:** Unknown id returns 404.
-- **Type:** Negative
-- **Steps:**
-  - Given a UUID that does not exist
-  - When I GET `/api/cafes/{uuid}`
-  - Then it is not found
-- **Expected:** 404, `"Cafe not found"`.
+**TC-READ-03 — Empty list for a new user**
+- **Type:** Positive
+- **Expected:** `[]`, `loading` false, no error.
 
 ---
-**TC-READ-05 — List when the user has no cafés**
-- **Precondition:** Freshly registered user with no cafés.
-- **Objective:** Empty list, not an error.
+**TC-LIVE-01 — Edits propagate without a refresh**
+- **Objective:** The core realtime guarantee.
 - **Type:** Positive
 - **Steps:**
-  - Given a new user
-  - When I GET `/api/cafes`
-  - Then an empty array is returned
-- **Expected:** 200; `[]`.
-
-### 4.6 Café — Update
+  - Given the same account is open on two devices (or two browser tabs)
+  - When a café is edited on one
+  - Then `onSnapshot` pushes to the other
+- **Expected:** The second updates **with no refetch, no pull-to-refresh, and no focus listener**. There is deliberately no refresh control anywhere in the app.
 
 ---
-**TC-UPD-01 — Partial update of a single field**
-- **Precondition:** User A owns café X.
-- **Objective:** Only provided fields change.
+**TC-LIVE-02 — Deleting a café being viewed elsewhere**
+- **Objective:** `useCafe` reports deletion rather than showing a stale café.
+- **Type:** Positive (edge)
+- **Steps:**
+  - Given device 1 sits on café X's detail screen
+  - When device 2 deletes X
+- **Expected:** `useCafe` yields `cafe === null`; the detail screen handles it without crashing.
+
+---
+**TC-LIVE-03 — Listener torn down on unmount**
+- **Objective:** No leaked subscriptions.
+- **Type:** Positive
+- **Expected:** The unsubscribe returned by `subscribeCafes`/`subscribeCafe` runs on unmount and on UID change; signing out does not leave a listener firing against a signed-out UID.
+
+---
+**TC-UPD-01 — Partial update leaves other fields intact**
+- **Type:** Positive
+- **Expected:** Only supplied keys change.
+
+---
+**TC-UPD-02 — Editing without touching photos**
+- **Objective:** Already-uploaded URLs pass through untouched.
 - **Type:** Positive
 - **Steps:**
-  - Given A owns café X
-  - When I PUT `/api/cafes/{X}` with only `{name: "Renamed"}`
-  - Then the name changes and other fields are untouched
-- **Expected:** 200; `name` updated; other fields preserved.
-
----
-**TC-UPD-02 — Update with an empty body**
-- **Precondition:** User A owns café X.
-- **Objective:** No-op updates are rejected.
-- **Type:** Negative
-- **Steps:**
-  - Given A owns café X
-  - When I PUT `/api/cafes/{X}` with `{}`
-  - Then there is nothing to update
-- **Expected:** 400, `"No fields to update"`.
-
----
-**TC-UPD-03 — Update with rating out of range**
-- **Precondition:** User A owns café X.
-- **Objective:** Rating bounds enforced on update too.
-- **Type:** Negative
-- **Steps:**
-  - Given A owns café X
-  - When I PUT `/api/cafes/{X}` with `rating = 9`
-  - Then validation fails
-- **Expected:** 422.
-
----
-**TC-UPD-04 — Update a non-existent café**
-- **Precondition:** Authenticated User A.
-- **Objective:** Unknown id returns 404.
-- **Type:** Negative
-- **Steps:**
-  - Given a UUID not in DB
-  - When I PUT `/api/cafes/{uuid}` with a valid field
-  - Then it is not found
-- **Expected:** 404, `"Cafe not found"`.
-
----
-**TC-UPD-05 — Update visited_date to empty string blanks it (edge)**
-- **Precondition:** User A owns café X with a real date.
-- **Objective:** Expose that `""` passes the `is not None` filter and overwrites.
-- **Type:** Negative (expected-to-expose-gap)
-- **Steps:**
-  - Given café X has `visited_date = "2026-07-01"`
-  - When I PUT `/api/cafes/{X}` with `visited_date = ""`
-  - Then the stored date is blanked (empty string is not None)
-- **Expected (current):** 200; `visited_date == ""`. Low real-world risk (the form always sends a value). See RISK-07.
-
-### 4.7 Café — Delete
+  - When an edit saves with the existing `https://firebasestorage...` URLs
+- **Expected:** No re-upload, no duplicate objects, URLs unchanged.
 
 ---
 **TC-DEL-01 — Delete an owned café**
-- **Precondition:** User A owns café X.
-- **Objective:** Owner can delete.
+- **Type:** Positive
+- **Expected:** Document removed; the café disappears from every live listener; the detail screen navigates back.
+
+---
+**TC-DEL-02 — Delete removes the café's Storage objects**
+- **Objective:** Cover the read-then-delete ordering.
 - **Type:** Positive
 - **Steps:**
-  - Given A owns café X
-  - When I DELETE `/api/cafes/{X}`
-  - Then it is removed
-- **Expected:** 200, `{ok: true}`; subsequent GET → 404.
+  - Given café X has 2 photos
+  - When X is deleted
+- **Expected:** Both objects removed. The photo URLs are read **before** the document is deleted; deleting objects individually is required because the rules deliberately don't grant `list` on the prefix.
 
 ---
-**TC-DEL-02 — Delete an already-deleted café**
-- **Precondition:** Café X already deleted.
-- **Objective:** Second delete is a clean 404.
-- **Type:** Negative
+**TC-DEL-03 — Storage cleanup failure doesn't fail the delete (edge)**
+- **Objective:** Cover the best-effort cleanup.
+- **Type:** Positive
 - **Steps:**
-  - Given café X was already deleted
-  - When I DELETE `/api/cafes/{X}` again
-  - Then nothing matches
-- **Expected:** 404, `"Cafe not found"`.
+  - Given an object is already gone (or was never a Storage URL)
+  - When the café is deleted
+- **Expected:** Delete still succeeds; the failure is swallowed. Trade-off: an orphaned object is preferred over a failed user action. See RISK-05.
+
+### 4.6 Photos
 
 ---
-**TC-DEL-03 — Delete without authentication**
-- **Precondition:** None.
-- **Objective:** Delete requires a token.
+**TC-PHOTO-01 — Picked photos upload to Storage, not Firestore**
+- **Objective:** The central storage constraint.
+- **Type:** Positive
+- **Steps:**
+  - Given photos picked as `data:image/jpeg;base64,...`
+  - When the café is saved
+- **Expected:** Each uploads to `users/{uid}/cafes/{cafeId}/{timestamp}-{index}.jpg`; the **document holds only download URLs**. A Firestore document caps at 1 MiB, which a single phone photo can exceed on its own.
+
+---
+**TC-PHOTO-02 — Photos are filed under the café's own ID**
+- **Objective:** Cover the create-then-patch ordering.
+- **Type:** Positive
+- **Expected:** The document is created first (with `photos: []`) so uploads can use its ID, then patched with the URLs. Keeps cleanup to a single folder.
+
+---
+**TC-PHOTO-03 — Removing a photo during an edit deletes the object**
+- **Type:** Positive
+- **Steps:**
+  - Given café X has 3 photos
+  - When an edit saves with only 2 of them
+- **Expected:** The dropped object is deleted from Storage; the other two are untouched.
+
+---
+**TC-PHOTO-04 — Over-size upload rejected**
+- **Objective:** `storage.rules` size cap.
 - **Type:** Negative
 - **Steps:**
-  - Given no `Authorization` header
-  - When I DELETE `/api/cafes/{any}`
-  - Then access is denied
-- **Expected:** 401, `"Not authenticated"`.
+  - When an image ≥ 10 MiB is uploaded
+- **Expected:** Rejected by the rules.
+
+---
+**TC-PHOTO-05 — Non-image upload rejected**
+- **Type:** Negative
+- **Expected:** Rejected — `contentType` must match `image/.*`.
+
+---
+**TC-PHOTO-06 — Storage not provisioned (environmental)**
+- **Precondition:** Cloud Storage not enabled on the project.
+- **Type:** Negative (environmental)
+- **Expected:** Cafés **without** photos save normally; cafés **with** photos fail on upload. A first-run stumble, not a code defect — see RUNNING.md step 5b.
+
+---
+**TC-PHOTO-07 — Media-library permission denied**
+- **Type:** Negative
+- **Expected:** `"Photo access permission denied."` in `form-error`; no picker opens; no crash.
+
+### 4.7 Multi-user isolation
+
+The rules are the **only** thing enforcing this — there is no server-side filter
+and no client-side query narrowing to fall back on. Treat every case here as
+release-blocking.
+
+---
+**TC-ISO-01 — A cannot read B's cafés**
+- **Type:** Negative
+- **Steps:**
+  - When A subscribes to `users/{B.uid}/cafes`
+- **Expected:** `permission-denied`. Not an empty list — the read never lands.
+
+---
+**TC-ISO-02 — A cannot read B's café by ID**
+- **Precondition:** A knows B's café ID.
+- **Type:** Negative
+- **Expected:** `permission-denied`.
+
+---
+**TC-ISO-03 — A cannot write to B's café**
+- **Type:** Negative
+- **Expected:** `permission-denied`; B's document unchanged.
+
+---
+**TC-ISO-04 — A cannot delete B's café**
+- **Type:** Negative
+- **Expected:** `permission-denied`; B's café intact.
+
+---
+**TC-ISO-05 — A cannot read B's photos**
+- **Objective:** Storage is scoped the same way.
+- **Type:** Negative
+- **Steps:**
+  - When A requests an object under `users/{B.uid}/cafes/...`
+- **Expected:** Denied. **Note:** a Storage *download URL* carries its own access token, so anyone holding the full URL can fetch that object. The path rules protect enumeration and direct access, not a leaked URL. See RISK-06.
+
+---
+**TC-ISO-06 — Stats are inherently per-user**
+- **Type:** Positive
+- **Expected:** `computeStats` runs over whatever `useCafes` returned, which is only the caller's cafés. There is no cross-user aggregation path to get wrong.
+
+---
+**TC-ISO-07 — Isolation holds against a hand-crafted request**
+- **Objective:** Prove enforcement isn't client-side.
+- **Type:** Negative
+- **Steps:**
+  - When a request for another user's path is issued outside the app (console, script, Rules Playground)
+- **Expected:** Denied. If this ever passes, the rules have regressed regardless of how the app behaves.
 
 ### 4.8 Stats
 
 ---
-**TC-STAT-01 — Stats with data**
-- **Precondition:** User A has several rated cafés with drinks and dates.
-- **Objective:** Aggregates are correct.
+**TC-STAT-01 — Aggregates with data**
 - **Type:** Positive
-- **Steps:**
-  - Given A owns rated cafés
-  - When I GET `/api/stats`
-  - Then aggregates are computed over A's cafés only
-- **Expected:** 200; `total_cafes` = count; `average_rating` = mean rounded to 2; `top_drink` = most frequent non-empty drink; `five_star_count` = count of rating==5; `by_month` present.
+- **Expected:** `total_cafes` = count; `average_rating` = mean rounded to 2dp; `top_drink` = most frequent non-empty trimmed drink; `five_star_count` = count of `rating === 5`; `by_month` populated.
 
 ---
-**TC-STAT-02 — Stats with no cafés (edge)**
-- **Precondition:** New user, no cafés.
-- **Objective:** No division-by-zero; sensible zeros.
-- **Type:** Positive
-- **Steps:**
-  - Given a user with zero cafés
-  - When I GET `/api/stats`
-  - Then all aggregates return safe defaults
-- **Expected:** 200; `total_cafes=0`, `average_rating=0`, `top_drink=""`, `five_star_count=0`, `by_month=[]`.
+**TC-STAT-02 — No cafés**
+- **Type:** Positive (edge)
+- **Expected:** `total_cafes=0`, `average_rating=0`, `top_drink=""`, `five_star_count=0`, `by_month=[]` — no division by zero.
 
 ---
-**TC-STAT-03 — Top drink ignores empty/blank drinks**
-- **Precondition:** Cafés where some have blank `favorite_drink`.
-- **Objective:** Blank drinks are excluded from the tally.
+**TC-STAT-03 — Blank drinks excluded from the tally**
 - **Type:** Positive
 - **Steps:**
-  - Given 3 cafés with `"Latte"` and 5 with `""`
-  - When I GET `/api/stats`
-  - Then only non-empty drinks are counted
-- **Expected:** `top_drink == "Latte"`.
+  - Given 3 cafés with `"Latte"` and 5 with `""` or whitespace
+- **Expected:** `top_drink === "Latte"`; blank/whitespace drinks are trimmed out, not counted as a category.
 
 ---
-**TC-STAT-04 — By-month excludes malformed dates (edge)**
-- **Precondition:** Cafés where one has `visited_date = "2026"` (too short) or `"banana"`.
-- **Objective:** Only `len >= 7` dates are grouped.
+**TC-STAT-04 — Malformed `visited_date` silently drops from the chart**
+- **Objective:** Expose the total/chart disagreement.
 - **Type:** Negative (expected-to-expose-gap)
 - **Steps:**
-  - Given a café with a short/garbage `visited_date`
-  - When I GET `/api/stats`
-  - Then that café is silently omitted from `by_month`
-- **Expected:** That café is absent from `by_month` and its count is lost from the chart (but still counted in `total_cafes`). See RISK-01.
+  - Given a café with `visited_date = "banana"` or `"2026"`
+  - When Stats renders
+  - Then only dates of length ≥ 7 are grouped
+- **Expected (current):** The café counts in `total_cafes` but is **absent from `by_month`**, so the chart and the total disagree with no indication why. See RISK-01.
 
 ---
-**TC-STAT-05 — "Last 6 months" shows last 6 months WITH data (edge / risk)**
-- **Precondition:** Cafés spanning 8 distinct months, including a gap.
-- **Objective:** Expose that the label is misleading.
+**TC-STAT-05 — "Last 6 months" means last 6 months *with data***
+- **Objective:** Expose the misleading label.
 - **Type:** Negative (expected-to-expose-gap)
 - **Steps:**
-  - Given cafés in Jan, Feb, Mar 2025 and then May, Jun 2026 (a long gap)
-  - When I GET `/api/stats`
-  - Then `by_month` returns the last 6 populated months, not the last 6 calendar months
-- **Expected (current):** old months can appear under a "Last 6 months" heading. See RISK-02.
+  - Given cafés in Jan–Mar 2025 and then May–Jun 2026 (a long gap)
+- **Expected (current):** `by_month` returns the last 6 **populated** months (`slice(-6)`), so months over a year old appear under a "last 6 months" heading. See RISK-02.
 
 ---
-**TC-STAT-06 — Top-drink tie is deterministic within a request**
-- **Precondition:** Two drinks tied on count.
-- **Objective:** Document tie-break behaviour.
+**TC-STAT-06 — Top-drink tie**
 - **Type:** Positive (informational)
 - **Steps:**
   - Given `"Latte"` and `"Mocha"` each appear twice
-  - When I GET `/api/stats`
-  - Then `max()` returns the first-inserted key at that count
-- **Expected:** Stable for a fixed insertion order; note it is not a defined product rule.
+- **Expected:** The sort is stable for a fixed input order, so the result is deterministic per render — but the winner is **not a defined product rule**. Don't assert a specific drink in automation.
 
-### 4.9 Multi-user isolation
+### 4.9 Frontend UI flows
 
 ---
-**TC-ISO-01 — User A cannot see User B's cafés in the list**
-- **Precondition:** A and B each own cafés.
-- **Objective:** List is strictly per-user.
+**TC-UI-01 — Boot with a stored session lands on Journal**
+- **Type:** Positive
+- **Expected:** `splash-loading` while `loading`, then the Journal tab; no login screen.
+
+---
+**TC-UI-02 — Fonts or theme failing doesn't strand the splash**
+- **Objective:** Cover the settled-or-errored gate in `app/_layout.tsx`.
+- **Type:** Positive (edge)
+- **Steps:**
+  - Given a font family fails to load
+- **Expected:** The app still renders with whatever loaded; the splash hides. A hang here means the gate regressed to requiring success.
+
+---
+**TC-UI-03 — Journal search filters name, address and drink**
+- **Type:** Positive
+- **Expected:** Case-insensitive live filtering via `search-input`.
+
+---
+**TC-UI-04 — Journal empty state**
+- **Type:** Positive
+- **Expected:** `empty-state` when the user has no cafés; `empty-state-no-matches` when a filter excludes everything. The two are distinct — a filter that empties the grid must not read as "you have no cafés".
+
+---
+**TC-UI-05 — Tag filtering**
+- **Type:** Positive
+- **Steps:**
+  - When a tag chip is selected
+- **Expected:** Only cafés carrying that tag remain; `tag-filter-all` / `clear-filters` restore the full list.
+
+---
+**TC-UI-06 — Facility filtering**
+- **Type:** Positive
+- **Expected:** Selecting facility chips narrows the grid; combined with a tag filter both apply.
+
+---
+**TC-UI-07 — Filter row doesn't collapse on a full grid**
+- **Objective:** Regression guard for a fixed layout bug.
+- **Type:** Positive
+- **Expected:** The filter row keeps its height when the grid fills the screen.
+
+---
+**TC-UI-08 — Odd-length grid keeps its column width**
+- **Objective:** Cover the spacer entry.
+- **Type:** Positive
+- **Steps:**
+  - Given an odd number of cafés
+- **Expected:** The trailing polaroid stays one column wide rather than stretching across the row.
+
+---
+**TC-UI-09 — "Nearby" sorting (device only)**
+- **Precondition:** Expo Go on a real device.
+- **Type:** Positive
+- **Steps:**
+  - When `sort-nearby` is chosen and location permission is granted
+- **Expected:** Cafés with coordinates sort by distance. `sort-recent` restores date order.
+
+---
+**TC-UI-10 — Location permission denied for "Nearby"**
 - **Type:** Negative
-- **Steps:**
-  - Given B owns café Y
-  - When I GET `/api/cafes` as A
-  - Then Y is not present
-- **Expected:** A's list contains only A's cafés.
+- **Expected:** `location-error` shown; the list stays in its previous order; no crash.
 
 ---
-**TC-ISO-02 — User A cannot GET User B's café by id**
-- **Precondition:** B owns café Y (A knows the id).
-- **Objective:** Cross-user detail is blocked without leaking existence.
+**TC-UI-11 — "Nearby" and geocoding are no-ops on web**
+- **Objective:** Confirm the intentional platform split.
+- **Type:** Positive (informational)
+- **Expected:** `src/utils/geocode.ts` returns null on web by design. **These paths cannot be exercised in a browser** — use Expo Go.
+
+---
+**TC-UI-12 — Café with no photo shows a placeholder**
+- **Type:** Positive
+- **Expected:** Placeholder icon, not a broken image.
+
+---
+**TC-UI-13 — Café form blocks an empty name**
 - **Type:** Negative
-- **Steps:**
-  - Given A has B's café id Y
-  - When I GET `/api/cafes/{Y}` as A
-  - Then it is reported as not found
-- **Expected:** 404 (same as a non-existent id).
+- **Expected:** `"Please give your café a name."`; no write.
 
 ---
-**TC-ISO-03 — User A cannot UPDATE User B's café**
-- **Precondition:** B owns café Y.
-- **Objective:** Cross-user writes blocked.
+**TC-UI-14 — Whitespace-only café name is trimmed then rejected**
 - **Type:** Negative
-- **Steps:**
-  - Given A has B's café id Y
-  - When I PUT `/api/cafes/{Y}` as A
-  - Then no document matches A's filter
-- **Expected:** 404; Y unchanged.
+- **Expected:** Same error as TC-UI-13 — `name.trim()` is empty.
 
 ---
-**TC-ISO-04 — User A cannot DELETE User B's café**
-- **Precondition:** B owns café Y.
-- **Objective:** Cross-user delete blocked.
-- **Type:** Negative
-- **Steps:**
-  - Given A has B's café id Y
-  - When I DELETE `/api/cafes/{Y}` as A
-  - Then nothing is deleted
-- **Expected:** 404; Y still exists for B.
-
----
-**TC-ISO-05 — Stats are scoped per user**
-- **Precondition:** A and B both have cafés.
-- **Objective:** Stats never mix users.
+**TC-UI-15 — Delete: cancel keeps the café**
 - **Type:** Positive
 - **Steps:**
-  - Given A and B each own cafés
-  - When each requests `/api/stats`
-  - Then each total reflects only their own cafés
-- **Expected:** A's `total_cafes` counts only A's; B's only B's.
-
-### 4.10 Frontend UI flows
+  - When `detail-delete-button` is tapped and the dialog is dismissed
+- **Expected:** Nothing deleted. Native uses `Alert.alert`; **web falls back to `window.confirm`** because Alert buttons are a no-op there — exercise both.
 
 ---
-**TC-UI-01 — App boot with a valid stored token lands on Journal**
-- **Precondition:** A valid token in secure storage.
-- **Objective:** Returning users skip login.
+**TC-UI-16 — Delete: confirm removes it**
+- **Type:** Positive
+- **Expected:** Café deleted, navigated back, absent from the journal.
+
+---
+**TC-UI-17 — Creating a café navigates to its detail**
+- **Type:** Positive
+- **Expected:** Detail screen for the new ID.
+
+---
+**TC-UI-18 — Editing pre-fills the form**
+- **Type:** Positive
+- **Expected:** `form-*` inputs seeded with current values, including tags, facilities, price and hospitality.
+
+---
+**TC-UI-19 — Places lists cafés with a location or address**
+- **Type:** Positive
+- **Expected:** `cafes.filter(c => c.location_link || c.address)`; others hidden.
+
+---
+**TC-UI-20 — "Open in Google Maps" searches by name + address**
+- **Objective:** Cover the replacement for the removed share-link flow.
 - **Type:** Positive
 - **Steps:**
-  - Given a valid token is stored
-  - When the app boots and calls `/auth/me`
-  - Then the user is routed to the tabs
-- **Expected:** Journal tab shown; no login screen.
+  - Given a café saved **without** a pasted link
+  - When `detail-open-map` is tapped
+- **Expected:** Opens `google.com/maps/search/?api=1&query=<name+address>`. Since `name` is always present, the button always has a usable URL and can render unconditionally.
 
 ---
-**TC-UI-02 — App boot with an invalid/expired token routes to Login**
-- **Precondition:** An expired/garbage token in storage.
-- **Objective:** Bad tokens are cleared on boot.
+**TC-UI-21 — A legacy café still opens its saved link**
+- **Type:** Positive (edge)
+- **Steps:**
+  - Given a café saved before the change, with a real `location_link`
+- **Expected:** The saved link is preferred over the search URL.
+
+---
+**TC-UI-22 — An unsafe stored link falls back to search**
+- **Objective:** Cover `isSafeLink`.
+- **Type:** Positive (security regression guard)
+- **Steps:**
+  - Given `location_link` holds `javascript:alert(1)`, a `file:` path, or any non-http(s) string
+  - When the map button is tapped
+- **Expected:** The stored value is **ignored** and the name+address search opens instead. The raw string must never reach `Linking.openURL`. *(This was an open risk under the old backend; it is now guarded — keep it that way.)*
+
+---
+**TC-UI-23 — Theme: Light / Dark / System**
 - **Type:** Positive
 - **Steps:**
-  - Given a stale token is stored
-  - When boot calls `/auth/me` and it fails
-  - Then the token is cleared and login is shown
-- **Expected:** Login screen; storage no longer holds the token.
+  - When each mode is chosen on Profile
+- **Expected:** Colors switch immediately; System follows the OS setting. The choice persists across restarts.
 
 ---
-**TC-UI-03 — Login with empty fields shows an inline error**
-- **Precondition:** On the login screen.
-- **Objective:** Client-side guard before calling the API.
-- **Type:** Negative
+**TC-UI-24 — Status bar contrast follows the resolved scheme**
+- **Objective:** Cover the deliberate non-use of `"auto"`.
+- **Type:** Positive (edge)
 - **Steps:**
-  - Given empty email and/or password
-  - When I tap Sign in
-  - Then an inline error appears and no request is sent
-- **Expected:** `"Please enter email and password."` in `login-error`.
+  - Given the OS is in dark mode
+  - When the in-app theme is set to **Light**
+- **Expected:** Dark status-bar glyphs — driven by the resolved scheme, not the OS. `"auto"` would get this backwards.
 
 ---
-**TC-UI-04 — Navigate from Login to Register**
-- **Precondition:** On the login screen.
-- **Objective:** Register link works.
+**TC-UI-25 — No hardcoded colors survive a theme switch**
+- **Objective:** Catch palette gaps.
 - **Type:** Positive
 - **Steps:**
-  - Given I am on Login
-  - When I tap the Register link
-  - Then the register screen opens
-- **Expected:** Register form displayed.
+  - When switching to Dark
+- **Expected:** No element keeps a light-mode color. Any that does is a hardcoded value missing a `LIGHT`/`DARK` palette entry.
 
 ---
-**TC-UI-05 — Journal search filters by name, drink, and address**
-- **Precondition:** Logged in with several cafés.
-- **Objective:** Client-side filtering works across fields.
+**TC-UI-26 — Backfill locations**
 - **Type:** Positive
 - **Steps:**
-  - Given cafés with varied names/drinks/addresses
-  - When I type a query in the search box
-  - Then only matching cafés remain (case-insensitive)
-- **Expected:** Filtered list updates live.
+  - Given cafés with addresses but no coordinates
+  - When `backfill-locations-button` is tapped on a device
+- **Expected:** Coordinates geocoded and saved; `backfill-result` reports the outcome, including the nothing-to-do case. Mobile-only — geocoding no-ops on web.
 
 ---
-**TC-UI-06 — Journal empty state**
-- **Precondition:** Logged in with zero cafés.
-- **Objective:** Friendly empty state shown.
-- **Type:** Positive
+**TC-UI-27 — Load failure is invisible to the user**
+- **Objective:** Expose a real gap.
+- **Type:** Negative (expected-to-expose-gap)
 - **Steps:**
-  - Given the user has no cafés
+  - Given the listener errors (rules rejection, offline, project misconfigured)
   - When the Journal loads
-  - Then the empty state is displayed
-- **Expected:** `empty-state` visible with "No cafés logged yet".
+- **Expected (current):** `useCafes` sets `error`, but **no screen reads it** — all four call sites destructure only `cafes`/`cafe` and `loading`. The user sees the empty state, indistinguishable from having no cafés. See RISK-03.
+
+### 4.10 Security & non-functional
 
 ---
-**TC-UI-07 — Pull-to-refresh reloads the journal**
-- **Precondition:** Logged in.
-- **Objective:** Refresh control refetches.
+**TC-SEC-01 — Rules deny by default**
 - **Type:** Positive
 - **Steps:**
-  - Given the Journal is showing
-  - When I pull to refresh
-  - Then the list refetches from the API
-- **Expected:** Spinner then updated list.
+  - When any path outside `users/{uid}/cafes/{cafeId}` is read or written
+- **Expected:** Denied by the catch-all `match /{document=**}`.
 
 ---
-**TC-UI-08 — Café with no photo shows a placeholder**
-- **Precondition:** A café with `photos=[]`.
-- **Objective:** Missing image handled gracefully.
-- **Type:** Positive
-- **Steps:**
-  - Given a café without photos
-  - When it renders in the list/detail
-  - Then a café-icon placeholder shows instead of a broken image
-- **Expected:** Placeholder rendered.
-
----
-**TC-UI-09 — Photo permission denied while adding a café**
-- **Precondition:** On the café form; OS will deny media-library permission.
-- **Objective:** Denied permission is handled, not crashed.
+**TC-SEC-02 — Signed-out access is refused**
 - **Type:** Negative
-- **Steps:**
-  - Given media-library permission is denied
-  - When I tap Add photo
-  - Then an inline error is shown and no picker opens
-- **Expected:** `"Photo access permission denied."`.
+- **Expected:** `isOwner` requires `request.auth != null`; unauthenticated reads and writes are denied.
 
 ---
-**TC-UI-10 — Submit café form with empty name**
-- **Precondition:** On the café form with a blank name.
-- **Objective:** Client validation before save.
-- **Type:** Negative
-- **Steps:**
-  - Given the name field is empty
-  - When I tap Save
-  - Then an inline error appears and no request fires
-- **Expected:** `"Please give your café a name."`.
-
----
-**TC-UI-11 — Whitespace-only café name is trimmed then rejected (edge)**
-- **Precondition:** On the café form; name = "   ".
-- **Objective:** Frontend trims before validating.
-- **Type:** Negative
-- **Steps:**
-  - Given the name is only spaces
-  - When I tap Save
-  - Then `name.trim()` is empty and the client blocks it
-- **Expected:** Same error as TC-UI-10 (unlike the raw API — see TC-AUTH-09/RISK-04).
-
----
-**TC-UI-12 — Delete café: cancel keeps the café**
-- **Precondition:** On a café detail screen.
-- **Objective:** Confirmation dialog can be dismissed safely.
-- **Type:** Positive
-- **Steps:**
-  - Given I tap the delete (trash) button
-  - When the confirm dialog appears and I choose Cancel
-  - Then nothing is deleted and I stay on the detail screen
-- **Expected:** No DELETE request; café intact. *(Covers the new confirm dialog; native alert + web `window.confirm`.)*
-
----
-**TC-UI-13 — Delete café: confirm removes it**
-- **Precondition:** On a café detail screen.
-- **Objective:** Confirmed delete removes the café and navigates back.
-- **Type:** Positive
-- **Steps:**
-  - Given I tap delete and choose Delete/OK in the dialog
-  - When the DELETE call succeeds
-  - Then I am returned to the journal and the café is gone
-- **Expected:** DELETE 200; café absent from the list on return.
-
----
-**TC-UI-14 — Expired session mid-use redirects to Login**
-- **Precondition:** Logged in; token invalidated/expired server-side while browsing.
-- **Objective:** A 401 on any non-auth call clears the token and routes to login.
-- **Type:** Positive
-- **Steps:**
-  - Given the stored token is no longer valid
-  - When any screen makes an API call and receives 401
-  - Then the client clears the token and navigates to Login
-- **Expected:** Redirect to `/(auth)/login`; token cleared. *(Covers the new 401 handler; excludes `/auth/*` so wrong-password stays inline.)*
-
----
-**TC-UI-15 — Places lists only cafés with a location link or address**
-- **Precondition:** Some cafés with location/address, some without.
-- **Objective:** Places filters correctly.
-- **Type:** Positive
-- **Steps:**
-  - Given a mix of cafés
-  - When I open the Places tab
-  - Then only cafés with `location_link` or `address` appear
-- **Expected:** Filtered list; others hidden.
-
----
-**TC-UI-16 — Open in Google Maps launches the saved link**
-- **Precondition:** A café with a valid `location_link`.
-- **Objective:** External link opens.
-- **Type:** Positive
-- **Steps:**
-  - Given a café with a Maps share link
-  - When I tap "Open in Google Maps"
-  - Then `Linking.openURL` is invoked with that link
-- **Expected:** Maps app / URL opens.
-
----
-**TC-UI-17 — Network error while loading a list is handled**
-- **Precondition:** Backend unreachable.
-- **Objective:** No crash on fetch failure.
-- **Type:** Negative
-- **Steps:**
-  - Given the backend is down
-  - When the Journal tries to load
-  - Then the error is caught and the loading state ends
-- **Expected:** No crash; empty/last-known list; error logged. (Consider adding a visible error state — see RISK-09.)
-
----
-**TC-UI-18 — Creating a café navigates to its detail**
-- **Precondition:** On the New Café form, valid data.
-- **Objective:** Post-create navigation.
-- **Type:** Positive
-- **Steps:**
-  - Given a valid new café
-  - When I Save
-  - Then I am redirected to the new café's detail
-- **Expected:** Detail screen for the created id.
-
----
-**TC-UI-19 — Editing a café pre-fills the form**
-- **Precondition:** On a café detail, tap edit.
-- **Objective:** Edit form seeds from existing values.
-- **Type:** Positive
-- **Steps:**
-  - Given an existing café
-  - When I open Edit
-  - Then all fields are pre-populated
-- **Expected:** Form shows current name/photos/rating/etc.
-
-### 4.11 Security & non-functional
-
----
-**TC-SEC-01 — CORS allows any origin with credentials**
-- **Precondition:** Backend running.
-- **Objective:** Document the permissive CORS posture.
+**TC-SEC-03 — Unbounded reads**
+- **Objective:** Document the absence of a cap.
 - **Type:** Negative (expected-to-expose-gap)
 - **Steps:**
-  - Given `allow_origins=["*"]` with `allow_credentials=True`
-  - When a cross-origin request is made
-  - Then the response permits it
-- **Expected:** Works today; tighten origins before production. See RISK-03.
+  - Given a user with a very large number of cafés
+  - When the Journal loads
+- **Expected:** `subscribeCafes` applies **no `limit()`** — every café is fetched and held live. The old `to_list(1000)` truncation is gone, so nothing is silently dropped, but reads and memory grow without bound. See RISK-07.
 
 ---
-**TC-SEC-02 — Login has no rate limiting (brute force)**
-- **Precondition:** A known email.
-- **Objective:** Expose unthrottled password attempts.
-- **Type:** Negative (expected-to-expose-gap)
+**TC-SEC-04 — Config values are public, not secret**
+- **Type:** Positive (informational)
 - **Steps:**
-  - Given a target email
-  - When many wrong-password logins are sent rapidly
-  - Then all are processed without lockout/backoff
-- **Expected:** No throttling. See RISK-05.
+  - Given `EXPO_PUBLIC_*` values are baked into the bundle and readable by anyone
+- **Expected:** This is **expected and safe** — they are public client identifiers. Security rests entirely on the rules. A finding of "API key exposed in the bundle" is not a defect here; a permissive rule is.
 
 ---
-**TC-SEC-03 — `location_link` opened without scheme validation**
-- **Precondition:** A café whose `location_link` is a non-https scheme.
-- **Objective:** Expose that any stored string is passed to `Linking.openURL`.
+**TC-SEC-05 — Web session storage**
 - **Type:** Negative (expected-to-expose-gap)
 - **Steps:**
-  - Given a café with `location_link = "javascript:alert(1)"` or an arbitrary app scheme
-  - When I tap "Open in Google Maps"
-  - Then the raw string is handed to `openURL`
-- **Expected:** Should be validated to `http(s)`/maps schemes. Self-entered data lowers risk but it is unguarded. See RISK-10.
-
----
-**TC-SEC-04 — Weak default `JWT_SECRET`**
-- **Precondition:** `.env` still using a placeholder secret.
-- **Objective:** Ensure production rotates the secret.
-- **Type:** Negative (expected-to-expose-gap)
-- **Steps:**
-  - Given `JWT_SECRET` is a short/placeholder value
-  - When tokens are signed
-  - Then they are forgeable if the secret is guessable
-- **Expected:** Enforce a strong secret; PyJWT already warns on short keys. See RISK-11.
-
----
-**TC-SEC-05 — No server-side pagination (data-loss ceiling)**
-- **Precondition:** A user with >1000 cafés (or >10000 for stats).
-- **Objective:** Expose the hard list caps.
-- **Type:** Negative (expected-to-expose-gap)
-- **Steps:**
-  - Given a user exceeds the `to_list(1000)` / `to_list(10000)` caps
-  - When they load the journal or stats
-  - Then results are silently truncated
-- **Expected:** Add pagination before scale. See RISK-12.
+  - Given the app runs on web
+- **Expected:** Firebase persists the session in localStorage (no Keychain equivalent), so it is reachable by XSS. Acceptable for scope; note before wider release. See RISK-08.
 
 ---
 
 ## 5. Edge cases & risk register
 
-Highest-value issues surfaced by this plan. Each links to the test cases that exercise it.
+Rewritten for the Firebase architecture. Risks tied to the old backend — CORS,
+login rate limiting, `JWT_SECRET` strength, token revocation, MongoDB's 16 MB
+document ceiling, and the `to_list` caps — **no longer exist** and have been
+removed rather than renumbered.
 
 | ID | Severity | Issue | Where | Exercised by |
 |---|---|---|---|---|
-| RISK-01 | **High** | `visited_date` has **no format validation** — any string is stored. Garbage/short dates are silently dropped from the stats month chart while still counting in `total_cafes`, so the chart and total disagree. | `CafeCreate.visited_date`, `stats.by_month` | TC-CAFE-08, TC-STAT-04 |
-| RISK-02 | **Medium** | Stats chart is labelled **"Last 6 months"** but returns the last 6 months *that contain data* (`sorted(...)[-6:]`). After an inactive stretch it shows stale months as if recent. | `stats` / `stats.tsx` | TC-STAT-05 |
-| RISK-03 | **Medium** | CORS `allow_origins=["*"]` **with** `allow_credentials=True`. Low practical risk today (Bearer, not cookies) but should be tightened. | `server.py` middleware | TC-SEC-01 |
-| RISK-04 | **Low** | Backend accepts a **whitespace-only `name`** (register and café) because `min_length=1` counts a space; only the frontend trims. | Pydantic models | TC-AUTH-09, TC-UI-11 |
-| RISK-05 | **Medium** | **No login rate limiting** — unlimited password guesses. | `login` | TC-SEC-02 |
-| RISK-06 | **Medium** | **No token revocation**. Logout is client-only; a leaked token stays valid up to 30 days, even after a password change. | `create_token`, `get_current_user` | TC-JWT-08 |
-| RISK-07 | **Low** | Update treats `""` as a real value (`is not None`), so sending `visited_date=""` **blanks** the date. Form always sends a value, so low real-world impact. | `update_cafe` | TC-UPD-05 |
-| RISK-08 | **Medium** | Photos are stored **inline as base64**; a café can approach MongoDB's **16 MB** document limit, and detail responses return every photo. | `cafes` schema | TC-CAFE-09, TC-READ-03 |
-| RISK-09 | **Low** | List/detail load failures only `console.warn` — no visible error state, so a failed fetch looks like "empty". | `(tabs)/*`, `cafe/[id].tsx` | TC-UI-17 |
-| RISK-10 | **Low/Med** | `location_link` is passed to `Linking.openURL` **without scheme validation**. Self-entered data limits exposure, but non-`http(s)` schemes are opened as-is. | `cafe/[id].tsx`, `places.tsx` | TC-SEC-03 |
-| RISK-11 | **High (prod)** | Placeholder/short `JWT_SECRET` makes tokens forgeable. Must be rotated to a strong random value in production. | `.env` / `JWT_SECRET` | TC-SEC-04 |
-| RISK-12 | **Medium** | No pagination — `to_list(1000)` (list) and `to_list(10000)` (stats) silently cap results. | `list_cafes`, `stats` | TC-SEC-05 |
-| RISK-13 | **Low** | On web, the JWT lives in AsyncStorage/localStorage (no Keychain), exposing it to XSS. Acceptable for scope; note for production. | `storage/index.web.ts` | TC-UI-02 |
+| RISK-01 | **High** | `visited_date` has **no format validation** — the rules only check `is string`. Garbage dates are stored, then silently dropped from the stats chart while still counting in `total_cafes`, so the chart and total disagree. | `isValidCafe`, `computeStats` | TC-STAT-04 |
+| RISK-02 | **Medium** | Stats chart is labelled **"Last 6 months"** but returns the last 6 months *containing data* (`slice(-6)`). After an inactive stretch it presents stale months as recent. | `computeStats` / `stats.tsx` | TC-STAT-05 |
+| RISK-03 | **Medium** | **Listener errors are invisible.** `useCafes`/`useCafe` expose `error`, but no screen reads it — a rules rejection or offline failure renders as an empty journal. Most likely to bite right after a rules change. | `(tabs)/*`, `cafe/[id].tsx` | TC-UI-27 |
+| RISK-04 | **Medium (process)** | Adding a café field without updating `isValidCafe` **and redeploying** makes every write fail with `permission-denied`, which reads as an auth bug rather than a validation one. | `firestore.rules` | TC-RULE-13 |
+| RISK-05 | **Low** | Storage cleanup is best-effort: a failed object delete is swallowed, leaving orphaned photos billed against the project. Deliberate — a cleanup failure shouldn't fail the user's action. | `deletePhotos` | TC-DEL-03 |
+| RISK-06 | **Low/Med** | Storage **download URLs carry their own access token**, so anyone with the full URL can fetch the photo regardless of the path rules. Fine while URLs stay in the owner's documents; matters if they're ever shared. | `uploadPhotos`, `storage.rules` | TC-ISO-05 |
+| RISK-07 | **Medium** | **No pagination.** `subscribeCafes` has no `limit()`, so every café is fetched and held live. Read cost and memory grow linearly with the journal. | `subscribeCafes` | TC-SEC-03 |
+| RISK-08 | **Low** | On web the Firebase session lives in localStorage (no Keychain), exposing it to XSS. Acceptable for scope; note for production. | `persistence.web.ts` | TC-SEC-05 |
+| RISK-09 | **Low** | Renaming or removing a `FACILITIES` key orphans that value in every café already saved with it; `facilityMeta` returns `undefined` and the chip silently disappears. No migration path. | `constants/facilities.ts` | TC-RULE-07 |
+
+### Resolved since the previous revision
+
+- **`location_link` opened without scheme validation.** `isSafeLink` in
+  `src/utils/maps.ts` now restricts stored links to `http(s)` and falls back to
+  a name+address search otherwise. Guarded by TC-UI-22 — keep that case.
+- **Whitespace-only names accepted by the API.** The permissive Pydantic
+  `min_length=1` went with the backend; the client trims (TC-AUTH-08, TC-UI-14).
+- **Inline base64 photos near MongoDB's 16 MB ceiling.** Photos now live in
+  Cloud Storage with a 10 MiB per-object rule (TC-PHOTO-01, TC-PHOTO-04).
 
 ## 6. Suggested execution order
 
-1. **API contract** (§4.1–4.8) — fast, deterministic; run first (extend `backend/tests/test_cafe_journal_api.py`).
-2. **Isolation** (§4.9) — security-critical; must pass before any release.
-3. **Frontend flows** (§4.10) — manual or Detox/Maestro E2E.
-4. **Security/non-functional** (§4.11) — mostly one-time posture checks tracked in the risk register.
+1. **Rules** (§4.3, §4.7) — the only access control there is, and cheap to
+   drive in the Rules Playground. Isolation must pass before any release.
+2. **Data layer** (§4.4–4.6, §4.8) — CRUD, realtime, photos, stats.
+3. **Frontend flows** (§4.9) — manual, in Expo Go for anything touching
+   location, photos or native storage.
+4. **Security posture** (§4.10) — mostly one-time checks tracked in the risk
+   register.
+
+Before any of it: `cd frontend && yarn lint && npx tsc --noEmit`, and make sure
+the rules deployed to the project match the ones in the repo. A stale ruleset
+makes §4.3 and §4.7 test something other than what you're reading.
