@@ -227,10 +227,15 @@ Check it landed:
 npx -y eas-cli@latest env:list --environment preview
 ```
 
-Six variables is a working state, not a broken one: `src/firebase/config.ts`
-only throws on the six `EXPO_PUBLIC_FIREBASE_*` values, so a build with just
-those launches and email/password sign-in works. Re-run the push once the Google
-client IDs exist — `env:push` updates variables that are already there.
+Six variables is enough for `yarn web`, but **not for a native build**.
+`src/firebase/config.ts` only throws on the six `EXPO_PUBLIC_FIREBASE_*` values,
+so the web bundle runs on those alone. Native is stricter: `AuthProvider` calls
+`useGoogleSignIn` on every launch, and expo-auth-session's Google provider throws
+``Client Id property `androidClientId` must be defined…`` when the client IDs are
+undefined — so an APK built without them crashes on startup, before any sign-in
+screen. Fill in the three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values (setup step 6)
+and re-run the push before building; `env:push` updates variables that are
+already there.
 
 ### 3. Build
 
@@ -264,8 +269,10 @@ dependency or an `app.json` native setting changes.
   provisioning. Without one, add `"ios": { "simulator": true }` to a profile in
   `eas.json` and run the result on a macOS Simulator.
 - **The three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values are still blank** (setup
-  step 6). Google Sign-In fails in any build until those OAuth clients exist;
-  email/password sign-in works regardless.
+  step 6). On web that only costs you Google Sign-In — email/password still
+  works. On native it is fatal: `AuthProvider` builds the Google auth request at
+  launch, so an APK missing those values crashes on startup. Create the OAuth
+  clients and push the values before the first native build.
 - **No Firebase *Android* app is registered** — only iOS and Web. Android builds
   run, but native Google Sign-In needs an Android OAuth client registered against
   the EAS keystore's SHA-1, which `npx -y eas-cli@latest credentials` prints.
