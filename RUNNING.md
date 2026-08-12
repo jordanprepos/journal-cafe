@@ -155,6 +155,127 @@ Firebase is reachable from anywhere.
 
 ---
 
+## Building with EAS (expo.dev)
+
+Expo Go covers most of the app, but a **development build** is what you want once
+you're exercising Google Sign-In or shipping a build to someone else. This project
+is managed / CNG — there is no `ios/` or `android/` directory, EAS runs `prebuild`
+in the cloud on every build.
+
+The CLI is always invoked through `npx -y eas-cli@latest`, the same way the
+Firebase CLI is.
+
+### 1. Sign in and link the expo.dev project
+
+```bash
+cd frontend
+npx -y eas-cli@latest login
+npx -y eas-cli@latest init --id <project-id-from-expo.dev>
+```
+
+Find `<project-id>` on your project's page at
+`expo.dev/accounts/<owner>/projects/cafe-journal` → *Project ID*. Passing `--id`
+links to the **existing** project; running bare `eas init` would offer to create a
+new one.
+
+`init` writes two keys into `app.json`: `expo.owner` (your expo.dev account) and
+`expo.extra.eas.projectId`. Commit both — they're how every later command knows
+which project this is.
+
+> `app.json`'s `slug` is `cafe-journal` and must match the slug on expo.dev. If
+> yours differs, change the `slug` to match rather than renaming the project.
+
+Verify:
+
+```bash
+npx -y eas-cli@latest whoami
+npx -y eas-cli@latest project:info
+```
+
+### 2. Push the `EXPO_PUBLIC_*` values to EAS
+
+`.env` is gitignored, so it is **not** uploaded to cloud builds — and
+`src/firebase/config.ts` throws at startup when the Firebase vars are missing. A
+build with no env injected installs fine and then crashes on launch. Push the
+values to EAS once instead.
+
+**EAS rejects empty values** — `env:push` reads the whole file and fails with
+`Variable value can not be empty` / `GraphQL request failed` on the first blank
+one. Until the three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` entries are filled in
+(setup step 6), push a filtered copy rather than `.env` itself:
+
+```bash
+cd frontend
+grep -Ev "^[A-Za-z_][A-Za-z0-9_]*=[[:space:]]*(\"\"|'')?[[:space:]]*$" .env > /tmp/eas.env
+cat /tmp/eas.env      # sanity-check: only lines with real values
+npx -y eas-cli@latest env:push --path /tmp/eas.env --environment development
+npx -y eas-cli@latest env:push --path /tmp/eas.env --environment preview
+rm /tmp/eas.env
+```
+
+Choose visibility **plain** when prompted. These are public client identifiers,
+not secrets — and EAS refuses to inject `secret`-visibility variables into a
+client bundle anyway. They can also be pasted into the dashboard under
+*Project → Environment variables*.
+
+Each build profile in `eas.json` declares the environment it reads
+(`development` → development, `preview` → preview), so nothing else needs wiring.
+
+Check it landed:
+
+```bash
+npx -y eas-cli@latest env:list --environment preview
+```
+
+Six variables is a working state, not a broken one: `src/firebase/config.ts`
+only throws on the six `EXPO_PUBLIC_FIREBASE_*` values, so a build with just
+those launches and email/password sign-in works. Re-run the push once the Google
+client IDs exist — `env:push` updates variables that are already there.
+
+### 3. Build
+
+```bash
+cd frontend
+yarn build:dev:android        # development build, APK
+yarn build:preview:android    # standalone internal build, APK
+yarn build:dev:ios            # needs a paid Apple Developer account — see below
+```
+
+EAS prints a URL to watch; the finished build is downloadable as a QR code from
+the same page. Android needs no account setup — EAS generates and stores a
+keystore for you on the first build.
+
+### 4. Run the development build
+
+Install the APK, then start Metro pointed at it:
+
+```bash
+cd frontend
+yarn start --dev-client       # add -c if the bundle looks stale
+```
+
+Open the app and pick your machine from the dev-launcher list (or scan the QR).
+Unlike a preview build, JS changes hot-reload — you only rebuild when a native
+dependency or an `app.json` native setting changes.
+
+### Known gaps
+
+- **iOS device builds need a paid Apple Developer account** ($99/yr) for ad-hoc
+  provisioning. Without one, add `"ios": { "simulator": true }` to a profile in
+  `eas.json` and run the result on a macOS Simulator.
+- **The three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values are still blank** (setup
+  step 6). On web that only costs you Google Sign-In — email/password still
+  works. On native it is fatal: `AuthProvider` builds the Google auth request at
+  launch, so an APK missing those values crashes on startup. Create the OAuth
+  clients and push the values before the first native build.
+- **No Firebase *Android* app is registered** — only iOS and Web. Android builds
+  run, but native Google Sign-In needs an Android OAuth client registered against
+  the EAS keystore's SHA-1, which `npx -y eas-cli@latest credentials` prints.
+- **Cloud Storage still isn't provisioned** (setup step 5b), so photo upload fails
+  in builds exactly as it does locally.
+
+---
+
 ## Migrating the old MongoDB data
 
 One-off, for café entries created before the Firebase move. Needs Mongo running

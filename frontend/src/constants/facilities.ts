@@ -1,8 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 
 // Single source of truth for facility chips (form, detail view, feed filter).
-// MUST stay in sync with the `Facility` enum in backend/server.py — a key that
-// doesn't exist server-side will 422 on save.
+// Nothing validates these keys server-side: `isValidCafe` in firestore.rules
+// only checks that `facilities` is a list of at most 20 entries, so the
+// vocabulary is whatever this file says it is.
+//
+// Keys are persisted verbatim in café documents, so renaming or removing one
+// orphans the value in every café already saved with it. `facilityMeta` returns
+// undefined for keys it doesn't recognise so those cafés render without the
+// chip instead of crashing — but the stored data is not migrated. Prefer adding
+// a new key over repurposing an existing one.
 export const FACILITIES = [
   { key: "indoor", label: "Indoor", icon: "home-outline" },
   { key: "outdoor", label: "Outdoor", icon: "leaf-outline" },
