@@ -270,16 +270,14 @@ no longer exists. The UI flow cases are still broadly useful.
 `test_result.md` opens with a protocol block marked DO NOT EDIT OR REMOVE.
 Leave it intact.
 
-## Known stale references
+## Legacy fields
 
-Flagged here rather than silently worked around:
+Nothing in the tree still points at the removed FastAPI/MongoDB backend — the
+constants files and `README.md` were corrected after the migration. One piece of
+history does survive in the data:
 
-- `src/constants/facilities.ts` and `src/constants/tags.ts` instruct the reader
-  to keep values in sync with `backend/server.py` and `CafeCreate.tags`. That
-  backend was removed in the Firebase migration; the real constraints now live
-  in `isValidCafe` in `firestore.rules` (facilities ≤ 20, tags ≤ 20).
-- `README.md` describes users pasting a Google Maps share link. That was
-  replaced by a name + address Maps search (`src/utils/maps.ts`); `location_link`
-  is now only read for cafés saved before the change.
-- `README.md`'s project structure lists a single `src/theme.ts` and does not
-  mention dark mode. The theme system described above is what the code has.
+- **`location_link` is legacy.** New cafés don't store a pasted Google Maps
+  share link; `cafeMapsUrl` in `src/utils/maps.ts` searches Maps by name +
+  address instead. The field is still read, and preferred when it holds a safe
+  `http(s)` URL, so cafés saved before the change keep opening their original
+  link. It remains in `CafeInput`, the form, and `isValidCafe` — don't drop it.
