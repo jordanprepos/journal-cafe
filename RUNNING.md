@@ -159,8 +159,11 @@ Firebase is reachable from anywhere.
 
 Expo Go covers most of the app, but a **development build** is what you want once
 you're exercising Google Sign-In or shipping a build to someone else. This project
-is managed / CNG — there is no `ios/` or `android/` directory, EAS runs `prebuild`
-in the cloud on every build.
+splits the two platforms: there is no `android/` directory (EAS runs `prebuild`
+for it in the cloud on every build), while `frontend/ios/` is committed as a bare
+project and used as-is. Regenerate the iOS project with `npx expo prebuild
+--platform ios --clean --no-install` and commit it whenever an iOS-affecting
+`app.json` field changes — see CLAUDE.md.
 
 The CLI is always invoked through `npx -y eas-cli@latest`, the same way the
 Firebase CLI is.

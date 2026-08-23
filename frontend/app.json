@@ -19,6 +19,11 @@
             "CFBundleURLSchemes": [
               "com.googleusercontent.apps.1027531417032-dqlptnku7te11qo5h8sdmt27fvfhjmf9"
             ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "frontend"
+            ]
           }
         ]
       }
@@ -27,7 +32,7 @@
       "package": "com.christopherjtp.cafejournal",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000"
+        "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
@@ -46,12 +51,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#FBF6EC",
           "dark": {
-            "image": "./assets/images/splash-icon.png",
+            "image": "./assets/images/splash-image.png",
             "backgroundColor": "#1F1A17"
           }
         }
