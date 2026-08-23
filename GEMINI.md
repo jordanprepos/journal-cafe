@@ -1,6 +1,6 @@
-# CLAUDE.md
+# GEMINI.md
 
-Guidance for AI assistants working in this repository.
+Guidance for Gemini / Antigravity AI assistants working in this repository.
 
 ## Overview
 
@@ -69,7 +69,6 @@ npx expo prebuild --platform ios --clean --no-install
 `--no-install` skips CocoaPods, which EAS runs itself. Commit the whole `ios/`
 tree including generated PNGs — a partial commit is what previously left the
 asset catalog pointing at files that were not in the repo.
-
 
 ```bash
 cd frontend
