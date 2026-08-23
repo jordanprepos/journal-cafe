@@ -1,0 +1,13 @@
+# Run on demand — there is no `on:` trigger. Production builds consume a build
+# slot and bump the version, so they are not something every push to main
+# should start:
+#   npx -y eas-cli@latest workflow:run create-production-builds.yml
+name: Create Production Builds
+jobs:
+  # See create-preview-builds.yml for why there is no iOS job.
+  build_android:
+    name: Build Android App
+    type: build
+    params:
+      platform: android
+      profile: production

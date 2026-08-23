@@ -272,19 +272,53 @@ Fix it once on expo.dev: **Project → Settings → GitHub → Base directory**,
 it is stored against the GitHub connection.
 
 The same rule applies to EAS Workflows: they are discovered relative to the
-project root, so `preview-builds.yml` lives at `frontend/.eas/workflows/`, not
-`.eas/workflows/` at the repo root, and not `frontend/.eas/` either. It declares
-no `on:` trigger, so it runs on demand:
+project root, so they live in `frontend/.eas/workflows/` — not `.eas/workflows/`
+at the repo root, and not `frontend/.eas/` either. There are exactly two:
+
+| File | Trigger | Builds |
+| --- | --- | --- |
+| `create-preview-builds.yml` | every push to `main` | Android, `preview` profile |
+| `create-production-builds.yml` | on demand | Android, `production` profile |
 
 ```bash
 cd frontend
-npx -y eas-cli@latest workflow:run preview-builds.yml
+npx -y eas-cli@latest workflow:run create-production-builds.yml
 ```
 
-A workflow builds whatever `profile` its jobs name — `preview-builds.yml` passes
-`profile: preview`, so both jobs read the `preview` profile in `eas.json` and its
-`preview` environment. Omitting `profile` would silently build `production`,
-which is the default.
+A workflow builds whatever `profile` its jobs name. Omitting `profile` silently
+builds `production`, which is the default — so always state it.
+
+**Neither has an iOS job.** Both profiles are `distribution: internal`, which on
+iOS means an ad-hoc build, which needs a paid Apple Developer account for the
+distribution certificate and provisioning profile. Without one the job dies at
+"Resolve build configuration":
+
+```
+Failed to set up credentials.
+You're in non-interactive mode. EAS CLI couldn't find any credentials suitable
+for internal distribution. Run this command again in interactive mode.
+```
+
+Workflows always run non-interactive, so this cannot be fixed from inside one.
+Once you have a paid account, register devices and generate the credentials from
+your own terminal first — after that a workflow can reuse them:
+
+```bash
+cd frontend
+npx -y eas-cli@latest device:create
+npx -y eas-cli@latest build --profile preview --platform ios
+```
+
+Then add the job back:
+
+```yaml
+  build_ios:
+    name: Build iOS App
+    type: build
+    params:
+      platform: ios
+      profile: preview
+```
 
 If the path is wrong the CLI does not say so — it resolves the argument against
 the current directory instead and reports the file it failed to open:

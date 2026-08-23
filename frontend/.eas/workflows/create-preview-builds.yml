@@ -3,15 +3,12 @@ on:
   push:
     branches: ["main"]
 jobs:
+  # iOS is absent on purpose: `preview` is distribution: internal, which on iOS
+  # means ad-hoc provisioning and therefore a paid Apple Developer account.
+  # Without one the job fails at "Resolve build configuration" every run.
   build_android:
     name: Build Android App
     type: build
     params:
       platform: android
-      profile: preview
-  build_ios:
-    name: Build iOS App
-    type: build
-    params:
-      platform: ios
       profile: preview
