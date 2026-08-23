@@ -158,12 +158,22 @@ Firebase is reachable from anywhere.
 ## Building with EAS (expo.dev)
 
 Expo Go covers most of the app, but a **development build** is what you want once
-you're exercising Google Sign-In or shipping a build to someone else. This project
-splits the two platforms: there is no `android/` directory (EAS runs `prebuild`
-for it in the cloud on every build), while `frontend/ios/` is committed as a bare
-project and used as-is. Regenerate the iOS project with `npx expo prebuild
---platform ios --clean --no-install` and commit it whenever an iOS-affecting
-`app.json` field changes — see CLAUDE.md.
+you're exercising Google Sign-In or shipping a build to someone else.
+
+The project is CNG: there is no `android/` or `ios/` directory, EAS runs
+`prebuild` for both in the cloud on every build, and `app.json` is the single
+source of truth for native config. Both paths are gitignored — if a local
+`npx expo prebuild` leaves them behind, delete them rather than committing them.
+A committed native folder silently wins over `app.json`, which EAS announces
+only in passing mid-build:
+
+```
+Specified value for "ios.bundleIdentifier" in app.json is ignored because an
+ios directory was detected in the project.
+```
+
+`npx -y expo-doctor` flags the same thing under *"Check for app config fields
+that may not be synced in a non-CNG project"*.
 
 The CLI is always invoked through `npx -y eas-cli@latest`, the same way the
 Firebase CLI is.
