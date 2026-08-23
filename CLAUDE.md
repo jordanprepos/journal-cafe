@@ -1,6 +1,10 @@
-# CLAUDE.md
+# Café Journal — agent guide
 
 Guidance for AI assistants working in this repository.
+
+`GEMINI.md` and `AGENTS.md` are symlinks to this file, so every assistant reads
+the same text and it can only be edited in one place. Add tool-specific notes as
+a section here, not as a separate file.
 
 ## Overview
 
@@ -51,25 +55,16 @@ npx -y firebase-tools@latest deploy --only auth
 
 Always invoke the Firebase CLI through `npx -y firebase-tools@latest`.
 
-Native builds go through EAS on expo.dev. The two platforms are **not** set up
-the same way: there is no `android/` directory — EAS runs `prebuild` for it in
-the cloud on every build — while `frontend/ios/` **is** committed as a bare
-project and is used as-is.
+Native builds go through EAS on expo.dev. **There is no `android/` or `ios/`
+directory** — the project is CNG, so EAS runs `prebuild` for both platforms in
+the cloud on every build and `app.json` is the single source of truth for native
+config. Both paths are gitignored; if a local `npx expo prebuild` leaves them
+behind, delete them rather than committing them.
 
-That split has one consequence worth internalising: **`app.json` no longer
-reaches iOS on its own.** Changing `ios.*`, `plugins`, `name`, `scheme`,
-`orientation`, `icon`, or `userInterfaceStyle` updates Android automatically but
-leaves iOS on the old committed native project. Regenerate and commit it:
-
-```bash
-cd frontend
-npx expo prebuild --platform ios --clean --no-install
-```
-
-`--no-install` skips CocoaPods, which EAS runs itself. Commit the whole `ios/`
-tree including generated PNGs — a partial commit is what previously left the
-asset catalog pointing at files that were not in the repo.
-
+Building for a **physical iPhone is not currently possible**: every profile is
+`distribution: internal`, which on iOS means ad-hoc provisioning and so a paid
+Apple Developer account. The EAS workflows build Android only — see RUNNING.md
+for how to add iOS back once that account exists.
 
 ```bash
 cd frontend

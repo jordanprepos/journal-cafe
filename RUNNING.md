@@ -158,12 +158,22 @@ Firebase is reachable from anywhere.
 ## Building with EAS (expo.dev)
 
 Expo Go covers most of the app, but a **development build** is what you want once
-you're exercising Google Sign-In or shipping a build to someone else. This project
-splits the two platforms: there is no `android/` directory (EAS runs `prebuild`
-for it in the cloud on every build), while `frontend/ios/` is committed as a bare
-project and used as-is. Regenerate the iOS project with `npx expo prebuild
---platform ios --clean --no-install` and commit it whenever an iOS-affecting
-`app.json` field changes — see CLAUDE.md.
+you're exercising Google Sign-In or shipping a build to someone else.
+
+The project is CNG: there is no `android/` or `ios/` directory, EAS runs
+`prebuild` for both in the cloud on every build, and `app.json` is the single
+source of truth for native config. Both paths are gitignored — if a local
+`npx expo prebuild` leaves them behind, delete them rather than committing them.
+A committed native folder silently wins over `app.json`, which EAS announces
+only in passing mid-build:
+
+```
+Specified value for "ios.bundleIdentifier" in app.json is ignored because an
+ios directory was detected in the project.
+```
+
+`npx -y expo-doctor` flags the same thing under *"Check for app config fields
+that may not be synced in a non-CNG project"*.
 
 The CLI is always invoked through `npx -y eas-cli@latest`, the same way the
 Firebase CLI is.
@@ -272,19 +282,53 @@ Fix it once on expo.dev: **Project → Settings → GitHub → Base directory**,
 it is stored against the GitHub connection.
 
 The same rule applies to EAS Workflows: they are discovered relative to the
-project root, so `preview-builds.yml` lives at `frontend/.eas/workflows/`, not
-`.eas/workflows/` at the repo root, and not `frontend/.eas/` either. It declares
-no `on:` trigger, so it runs on demand:
+project root, so they live in `frontend/.eas/workflows/` — not `.eas/workflows/`
+at the repo root, and not `frontend/.eas/` either. There are exactly two:
+
+| File | Trigger | Builds |
+| --- | --- | --- |
+| `create-preview-builds.yml` | every push to `main` | Android, `preview` profile |
+| `create-production-builds.yml` | on demand | Android, `production` profile |
 
 ```bash
 cd frontend
-npx -y eas-cli@latest workflow:run preview-builds.yml
+npx -y eas-cli@latest workflow:run create-production-builds.yml
 ```
 
-A workflow builds whatever `profile` its jobs name — `preview-builds.yml` passes
-`profile: preview`, so both jobs read the `preview` profile in `eas.json` and its
-`preview` environment. Omitting `profile` would silently build `production`,
-which is the default.
+A workflow builds whatever `profile` its jobs name. Omitting `profile` silently
+builds `production`, which is the default — so always state it.
+
+**Neither has an iOS job.** Both profiles are `distribution: internal`, which on
+iOS means an ad-hoc build, which needs a paid Apple Developer account for the
+distribution certificate and provisioning profile. Without one the job dies at
+"Resolve build configuration":
+
+```
+Failed to set up credentials.
+You're in non-interactive mode. EAS CLI couldn't find any credentials suitable
+for internal distribution. Run this command again in interactive mode.
+```
+
+Workflows always run non-interactive, so this cannot be fixed from inside one.
+Once you have a paid account, register devices and generate the credentials from
+your own terminal first — after that a workflow can reuse them:
+
+```bash
+cd frontend
+npx -y eas-cli@latest device:create
+npx -y eas-cli@latest build --profile preview --platform ios
+```
+
+Then add the job back:
+
+```yaml
+  build_ios:
+    name: Build iOS App
+    type: build
+    params:
+      platform: ios
+      profile: preview
+```
 
 If the path is wrong the CLI does not say so — it resolves the argument against
 the current directory instead and reports the file it failed to open:
