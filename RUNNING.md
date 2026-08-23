@@ -272,13 +272,25 @@ Fix it once on expo.dev: **Project → Settings → GitHub → Base directory**,
 it is stored against the GitHub connection.
 
 The same rule applies to EAS Workflows: they are discovered relative to the
-project root, so `create-production-builds.yml` lives at
-`frontend/.eas/workflows/`, not `.eas/workflows/` at the repo root. It declares
+project root, so `preview-builds.yml` lives at `frontend/.eas/workflows/`, not
+`.eas/workflows/` at the repo root, and not `frontend/.eas/` either. It declares
 no `on:` trigger, so it runs on demand:
 
 ```bash
 cd frontend
-npx -y eas-cli@latest workflow:run create-production-builds.yml
+npx -y eas-cli@latest workflow:run preview-builds.yml
+```
+
+A workflow builds whatever `profile` its jobs name — `preview-builds.yml` passes
+`profile: preview`, so both jobs read the `preview` profile in `eas.json` and its
+`preview` environment. Omitting `profile` would silently build `production`,
+which is the default.
+
+If the path is wrong the CLI does not say so — it resolves the argument against
+the current directory instead and reports the file it failed to open:
+
+```
+ENOENT: no such file or directory, open '.../frontend/preview-builds.yml'
 ```
 
 ### 4. Run the development build
