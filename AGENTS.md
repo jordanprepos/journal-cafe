@@ -51,8 +51,25 @@ npx -y firebase-tools@latest deploy --only auth
 
 Always invoke the Firebase CLI through `npx -y firebase-tools@latest`.
 
-Native builds go through EAS on expo.dev — the project is managed / CNG, so there
-is no `ios/` or `android/` directory and prebuild happens in the cloud:
+Native builds go through EAS on expo.dev. The two platforms are **not** set up
+the same way: there is no `android/` directory — EAS runs `prebuild` for it in
+the cloud on every build — while `frontend/ios/` **is** committed as a bare
+project and is used as-is.
+
+That split has one consequence worth internalising: **`app.json` no longer
+reaches iOS on its own.** Changing `ios.*`, `plugins`, `name`, `scheme`,
+`orientation`, `icon`, or `userInterfaceStyle` updates Android automatically but
+leaves iOS on the old committed native project. Regenerate and commit it:
+
+```bash
+cd frontend
+npx expo prebuild --platform ios --clean --no-install
+```
+
+`--no-install` skips CocoaPods, which EAS runs itself. Commit the whole `ios/`
+tree including generated PNGs — a partial commit is what previously left the
+asset catalog pointing at files that were not in the repo.
+
 
 ```bash
 cd frontend
