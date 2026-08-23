@@ -196,6 +196,18 @@ Two mechanical aids are worth knowing:
 - **Expected:** `google-signin-button` is disabled until the OAuth request is prepared.
 
 ---
+**TC-GOOG-05 — Native build with no OAuth client for the platform**
+- **Precondition:** Native build where the current platform's
+  `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` is unset — an Android APK today, since no
+  Android OAuth client exists.
+- **Objective:** A missing client ID costs you Google sign-in, not the app.
+- **Type:** Negative
+- **Expected:** App launches to Login; `google-signin-button` renders **disabled**;
+  email/password sign-in works normally. Regression guard: before the module-level
+  check in `useGoogleSignIn`, `expo-auth-session` threw inside `AuthProvider`'s
+  first render and the app died at launch.
+
+---
 **TC-GOOG-04 — Google sign-in on web from an unauthorized domain**
 - **Precondition:** Serving host not listed under Authentication → Authorized domains.
 - **Type:** Negative
@@ -853,6 +865,12 @@ removed rather than renumbered.
   `min_length=1` went with the backend; the client trims (TC-AUTH-08, TC-UI-14).
 - **Inline base64 photos near MongoDB's 16 MB ceiling.** Photos now live in
   Cloud Storage with a 10 MiB per-object rule (TC-PHOTO-01, TC-PHOTO-04).
+- **A missing Google OAuth client crashed native builds at launch.**
+  `expo-auth-session` throws when the current platform's client ID is
+  `undefined`, and `AuthProvider` — which wraps the whole app — called the hook
+  unconditionally, so an Android APK died before rendering anything even though
+  email/password worked. `useGoogleSignIn` now picks its implementation at module
+  load and falls back to a `ready: false` stand-in (TC-GOOG-05).
 
 ## 6. Suggested execution order
 

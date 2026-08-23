@@ -312,10 +312,13 @@ dependency or an `app.json` native setting changes.
   provisioning. Without one, add `"ios": { "simulator": true }` to a profile in
   `eas.json` and run the result on a macOS Simulator.
 - **The three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values are still blank** (setup
-  step 6). On web that only costs you Google Sign-In — email/password still
-  works. On native it is fatal: `AuthProvider` builds the Google auth request at
-  launch, so an APK missing those values crashes on startup. Create the OAuth
-  clients and push the values before the first native build.
+  step 6), so Google Sign-In is unavailable — the button renders disabled and
+  email/password is the way in. It is no longer fatal: `useGoogleSignIn` checks
+  for the current platform's client ID at module load and falls back to a
+  stand-in that reports `ready: false`. Before that guard existed,
+  `expo-auth-session` threw during `AuthProvider`'s first render and took the
+  whole app down at launch, on a build where everything else worked. Create the
+  OAuth clients and push the values whenever you want the button live.
 - **No Firebase *Android* app is registered** — only iOS and Web. Android builds
   run, but native Google Sign-In needs an Android OAuth client registered against
   the EAS keystore's SHA-1, which `npx -y eas-cli@latest credentials` prints.
