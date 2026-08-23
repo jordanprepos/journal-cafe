@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Café Journal",
-    "slug": "cafe-journal",
+    "slug": "journal-cafe",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
