@@ -1,6 +1,10 @@
-# CLAUDE.md
+# Café Journal — agent guide
 
 Guidance for AI assistants working in this repository.
+
+`GEMINI.md` and `AGENTS.md` are symlinks to this file, so every assistant reads
+the same text and it can only be edited in one place. Add tool-specific notes as
+a section here, not as a separate file.
 
 ## Overview
 
