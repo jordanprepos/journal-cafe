@@ -272,13 +272,25 @@ Fix it once on expo.dev: **Project → Settings → GitHub → Base directory**,
 it is stored against the GitHub connection.
 
 The same rule applies to EAS Workflows: they are discovered relative to the
-project root, so `create-production-builds.yml` lives at
-`frontend/.eas/workflows/`, not `.eas/workflows/` at the repo root. It declares
+project root, so `preview-builds.yml` lives at `frontend/.eas/workflows/`, not
+`.eas/workflows/` at the repo root, and not `frontend/.eas/` either. It declares
 no `on:` trigger, so it runs on demand:
 
 ```bash
 cd frontend
-npx -y eas-cli@latest workflow:run create-production-builds.yml
+npx -y eas-cli@latest workflow:run preview-builds.yml
+```
+
+A workflow builds whatever `profile` its jobs name — `preview-builds.yml` passes
+`profile: preview`, so both jobs read the `preview` profile in `eas.json` and its
+`preview` environment. Omitting `profile` would silently build `production`,
+which is the default.
+
+If the path is wrong the CLI does not say so — it resolves the argument against
+the current directory instead and reports the file it failed to open:
+
+```
+ENOENT: no such file or directory, open '.../frontend/preview-builds.yml'
 ```
 
 ### 4. Run the development build
@@ -300,10 +312,13 @@ dependency or an `app.json` native setting changes.
   provisioning. Without one, add `"ios": { "simulator": true }` to a profile in
   `eas.json` and run the result on a macOS Simulator.
 - **The three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values are still blank** (setup
-  step 6). On web that only costs you Google Sign-In — email/password still
-  works. On native it is fatal: `AuthProvider` builds the Google auth request at
-  launch, so an APK missing those values crashes on startup. Create the OAuth
-  clients and push the values before the first native build.
+  step 6), so Google Sign-In is unavailable — the button renders disabled and
+  email/password is the way in. It is no longer fatal: `useGoogleSignIn` checks
+  for the current platform's client ID at module load and falls back to a
+  stand-in that reports `ready: false`. Before that guard existed,
+  `expo-auth-session` threw during `AuthProvider`'s first render and took the
+  whole app down at launch, on a build where everything else worked. Create the
+  OAuth clients and push the values whenever you want the button live.
 - **No Firebase *Android* app is registered** — only iOS and Web. Android builds
   run, but native Google Sign-In needs an Android OAuth client registered against
   the EAS keystore's SHA-1, which `npx -y eas-cli@latest credentials` prints.
