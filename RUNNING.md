@@ -174,7 +174,7 @@ npx -y eas-cli@latest init --id <project-id-from-expo.dev>
 ```
 
 Find `<project-id>` on your project's page at
-`expo.dev/accounts/<owner>/projects/cafe-journal` → *Project ID*. Passing `--id`
+`expo.dev/accounts/<owner>/projects/journal-cafe` → *Project ID*. Passing `--id`
 links to the **existing** project; running bare `eas init` would offer to create a
 new one.
 
@@ -182,8 +182,17 @@ new one.
 `expo.extra.eas.projectId`. Commit both — they're how every later command knows
 which project this is.
 
-> `app.json`'s `slug` is `cafe-journal` and must match the slug on expo.dev. If
+> `app.json`'s `slug` is `journal-cafe` and must match the slug on expo.dev. If
 > yours differs, change the `slug` to match rather than renaming the project.
+> When they disagree, every `eas` command refuses to run:
+>
+> ```
+> Slug for project identified by "extra.eas.projectId" (journal-cafe) does not
+> match the "slug" field (cafe-journal).
+> ```
+>
+> The slug in parentheses is the authoritative one — it is what the `projectId`
+> actually resolves to on expo.dev. Copy it into `app.json`.
 
 Verify:
 
