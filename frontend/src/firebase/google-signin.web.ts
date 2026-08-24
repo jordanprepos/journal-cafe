@@ -6,7 +6,7 @@ import type { GoogleSignIn } from "./google-signin";
 
 /**
  * Google sign-in on web. Firebase's own popup flow handles the OAuth round trip,
- * so no expo-auth-session client IDs are needed here.
+ * so no OAuth client IDs are needed here.
  *
  * The serving domain must be listed under Authentication > Authorized domains
  * (`localhost` for local dev) or the popup closes with `auth/unauthorized-domain`.

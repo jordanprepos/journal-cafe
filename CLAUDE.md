@@ -203,7 +203,7 @@ Sessions persist automatically: AsyncStorage on native, localStorage on web.
 **Platform splits use Metro's `.web.ts` suffix** — write both halves or the web
 build breaks:
 
-- `src/firebase/google-signin.ts` (expo-auth-session) / `.web.ts` (popup)
+- `src/firebase/google-signin.ts` (native Google SDK) / `.web.ts` (popup)
 - `src/firebase/persistence.ts` / `.web.ts`
 - `src/utils/storage/index.ts` / `.web.ts`
 - `src/theme/preference-boot.ts` / `.web.ts`
@@ -282,6 +282,11 @@ Rules:
   photos fail on upload — see RUNNING.md step 5b.
 - **Google Sign-in on web** needs the serving host listed under Authentication →
   Authorized domains, with no protocol or port.
+- **Google Sign-in on device needs a dev/preview build**, not Expo Go — the
+  native SDK isn't bundled there, so the button renders disabled. It reads
+  `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (the ID token's audience) on every platform;
+  the Android OAuth client is matched by package name + signing SHA-1 and has no
+  env var at all.
 
 ## Testing
 
