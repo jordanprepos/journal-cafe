@@ -108,6 +108,17 @@ That command prints a `google-services.json`. **You don't need the file** — th
 app reads its config from `EXPO_PUBLIC_*`, not from `google-services.json`. Only
 the client ID matters; it goes in `.env` at step 6.
 
+If no `client_type: 1` entry appears, don't assume the client wasn't created —
+`sdkconfig` can lag behind. Check **Google Cloud Console → APIs & Services →
+Credentials** on the same project, where it shows as *Android client for
+com.christopherjtp.cafejournal*, and copy the ID from there:
+
+https://console.cloud.google.com/apis/credentials?project=my-cafe-journal
+
+Confirm the project picker reads `my-cafe-journal` and not a default *My First
+Project* — an empty Credentials page with no API keys means you're in the wrong
+project or signed in as the wrong Google account, not that nothing exists.
+
 > **The SHA-1 is per signing key.** This one covers APKs that EAS signs. A Play
 > Store release re-signed by Play App Signing has a different fingerprint, which
 > has to be added here as a second one — otherwise sign-in works everywhere except
@@ -301,13 +312,36 @@ npx -y eas-cli@latest env:push --path /tmp/eas.env --environment preview
 rm /tmp/eas.env
 ```
 
-Choose visibility **plain** when prompted. These are public client identifiers,
-not secrets — and EAS refuses to inject `secret`-visibility variables into a
-client bundle anyway. They can also be pasted into the dashboard under
-*Project → Environment variables*.
+Choose visibility **plaintext** when prompted. These are public client
+identifiers, not secrets. The choice matters more than it looks:
+
+| Visibility | Reaches the build? | Listed in the build log? |
+| --- | --- | --- |
+| `plaintext` | yes | yes |
+| `sensitive` | yes | masked |
+| `secret` | **no** | no |
+
+A `secret` variable pushes, lists, and looks entirely correct while never
+reaching the app — EAS will not inject one into a client bundle.
 
 Each build profile in `eas.json` declares the environment it reads
 (`development` → development, `preview` → preview), so nothing else needs wiring.
+
+**For a single variable, set it directly** rather than re-pushing the file.
+`env:push` only carries what was in the copy you generated, so a value added to
+`.env` after that copy was made is silently missing:
+
+```bash
+cd frontend
+npx -y eas-cli@latest env:set --scope project --visibility plaintext \
+  --environment preview --environment development \
+  --name EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID \
+  --value "<the client ID>"
+```
+
+> `env:set` replaced `env:create` in eas-cli 22. The old name still runs but
+> warns, and it rejects `--visibility plain` — the accepted values are
+> `plaintext`, `sensitive`, `secret`.
 
 Check it landed:
 
@@ -317,8 +351,19 @@ npx -y eas-cli@latest env:list --environment preview
 
 Six variables is a working state, not a broken one: `src/firebase/config.ts`
 only throws on the six `EXPO_PUBLIC_FIREBASE_*` values, so a build with just
-those launches and email/password sign-in works. Re-run the push once the Google
-client IDs exist — `env:push` updates variables that are already there.
+those launches and email/password sign-in works.
+
+**`env:list` is not proof the value reached a build.** The authoritative check is
+the build's own log, which names every variable it loaded:
+
+```
+Environment variables with visibility "Plain text" and "Sensitive" loaded from
+the "preview" environment on EAS: EXPO_PUBLIC_FIREBASE_API_KEY, …
+```
+
+If a name is absent there, that APK does not have it, and installing it will
+change nothing — `EXPO_PUBLIC_*` is baked in at build time. Check that line
+before spending time on the device.
 
 ### 3. Build
 
