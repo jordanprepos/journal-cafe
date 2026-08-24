@@ -277,8 +277,8 @@ Rules:
   `expo-file-system/legacy`. Use the alternative it names.
 - **Geocoding and "Nearby" are mobile-only.** `src/utils/geocode.ts` no-ops on
   web by design; exercise those paths in Expo Go on a real device.
-- **Cloud Storage may not be provisioned** on a given Firebase project (it needs
-  the Blaze plan). Until it is, cafés without photos save fine and cafés with
+- **Cloud Storage needs the Blaze plan** and is provisioned on `my-cafe-journal`.
+  On a project where it isn't, cafés without photos save fine and cafés with
   photos fail on upload — see RUNNING.md step 5b.
 - **Google Sign-in on web** needs the serving host listed under Authentication →
   Authorized domains, with no protocol or port.

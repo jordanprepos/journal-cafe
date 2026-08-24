@@ -16,17 +16,18 @@ npx -y firebase-tools@latest --version
 
 ## One-time setup
 
-> **Status on this machine (2026-08-03):** steps 1–7 are **done** against project
+> **Status on this machine (2026-08-24):** steps 1–7 are **done** against project
 > `my-cafe-journal`. Two apps are registered — iOS
 > `1:1027531417032:ios:89701d8fae8cfdc413ccfd` (bundle
 > `com.christopherjtp.cafejournal`) and Web
 > `1:1027531417032:web:2ea9d1364a5f7a2d13ccfd`. Email/Password and Google are
-> enabled, Firestore rules are live, and `frontend/.env` is filled in.
+> enabled, Firestore and Storage rules are live, **Cloud Storage is provisioned**
+> so café photos upload, and `frontend/.env` is filled in.
 >
-> **Three things remain:** Cloud Storage isn't provisioned (see step 5b); there is
-> **no Android app registered** (step 3), so Google Sign-in fails on the Android
-> builds EAS produces; and of the `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values only the
-> iOS one is filled in (step 6). Email/password sign-in works throughout.
+> **What remains is Google Sign-in on Android:** no Android app is registered
+> (step 3), so there is no Android OAuth client and
+> `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` is blank (steps 3b and 6). The button is
+> disabled on Android builds; email/password works everywhere.
 > The steps below are kept for setting the project up from scratch elsewhere.
 
 ### 1. Sign in to Firebase
@@ -107,6 +108,17 @@ That command prints a `google-services.json`. **You don't need the file** — th
 app reads its config from `EXPO_PUBLIC_*`, not from `google-services.json`. Only
 the client ID matters; it goes in `.env` at step 6.
 
+If no `client_type: 1` entry appears, don't assume the client wasn't created —
+`sdkconfig` can lag behind. Check **Google Cloud Console → APIs & Services →
+Credentials** on the same project, where it shows as *Android client for
+com.christopherjtp.cafejournal*, and copy the ID from there:
+
+https://console.cloud.google.com/apis/credentials?project=my-cafe-journal
+
+Confirm the project picker reads `my-cafe-journal` and not a default *My First
+Project* — an empty Credentials page with no API keys means you're in the wrong
+project or signed in as the wrong Google account, not that nothing exists.
+
 > **The SHA-1 is per signing key.** This one covers APKs that EAS signs. A Play
 > Store release re-signed by Play App Signing has a different fingerprint, which
 > has to be added here as a second one — otherwise sign-in works everywhere except
@@ -147,7 +159,13 @@ npx -y firebase-tools@latest deploy --only storage --project my-cafe-journal
 ```
 
 Until this is done, adding a café **without** photos works fine; adding one **with**
-photos fails on upload.
+photos fails on upload. Both parts matter: with a bucket but no deployed rules the
+upload still fails, and it fails as a *permission* error rather than a missing-bucket
+one, which reads like a bug in the app.
+
+Check the bucket's name matches `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` in `.env`
+(and in the EAS environments). Projects created from late 2024 get
+`<project>.firebasestorage.app`; older ones get `<project>.appspot.com`.
 
 `firestore.rules` and `storage.rules` scope every read and write to the signed-in
 owner. **Review them before you share the app** — see the note at the end.
@@ -294,13 +312,36 @@ npx -y eas-cli@latest env:push --path /tmp/eas.env --environment preview
 rm /tmp/eas.env
 ```
 
-Choose visibility **plain** when prompted. These are public client identifiers,
-not secrets — and EAS refuses to inject `secret`-visibility variables into a
-client bundle anyway. They can also be pasted into the dashboard under
-*Project → Environment variables*.
+Choose visibility **plaintext** when prompted. These are public client
+identifiers, not secrets. The choice matters more than it looks:
+
+| Visibility | Reaches the build? | Listed in the build log? |
+| --- | --- | --- |
+| `plaintext` | yes | yes |
+| `sensitive` | yes | masked |
+| `secret` | **no** | no |
+
+A `secret` variable pushes, lists, and looks entirely correct while never
+reaching the app — EAS will not inject one into a client bundle.
 
 Each build profile in `eas.json` declares the environment it reads
 (`development` → development, `preview` → preview), so nothing else needs wiring.
+
+**For a single variable, set it directly** rather than re-pushing the file.
+`env:push` only carries what was in the copy you generated, so a value added to
+`.env` after that copy was made is silently missing:
+
+```bash
+cd frontend
+npx -y eas-cli@latest env:set --scope project --visibility plaintext \
+  --environment preview --environment development \
+  --name EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID \
+  --value "<the client ID>"
+```
+
+> `env:set` replaced `env:create` in eas-cli 22. The old name still runs but
+> warns, and it rejects `--visibility plain` — the accepted values are
+> `plaintext`, `sensitive`, `secret`.
 
 Check it landed:
 
@@ -310,8 +351,19 @@ npx -y eas-cli@latest env:list --environment preview
 
 Six variables is a working state, not a broken one: `src/firebase/config.ts`
 only throws on the six `EXPO_PUBLIC_FIREBASE_*` values, so a build with just
-those launches and email/password sign-in works. Re-run the push once the Google
-client IDs exist — `env:push` updates variables that are already there.
+those launches and email/password sign-in works.
+
+**`env:list` is not proof the value reached a build.** The authoritative check is
+the build's own log, which names every variable it loaded:
+
+```
+Environment variables with visibility "Plain text" and "Sensitive" loaded from
+the "preview" environment on EAS: EXPO_PUBLIC_FIREBASE_API_KEY, …
+```
+
+If a name is absent there, that APK does not have it, and installing it will
+change nothing — `EXPO_PUBLIC_*` is baked in at build time. Check that line
+before spending time on the device.
 
 ### 3. Build
 
@@ -422,8 +474,6 @@ dependency or an `app.json` native setting changes.
   load and falls back to a stand-in that reports `ready: false`. Before that guard
   existed, `expo-auth-session` threw during `AuthProvider`'s first render and took
   the whole app down at launch, on a build where everything else worked.
-- **Cloud Storage still isn't provisioned** (setup step 5b), so photo upload fails
-  in builds exactly as it does locally.
 
 ---
 
