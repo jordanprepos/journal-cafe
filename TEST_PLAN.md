@@ -39,9 +39,10 @@ Out of scope: push notifications, deployment/CI, EAS builds.
   restart after editing.
 - Frontend running: `cd frontend && yarn start` (Expo Go) or `yarn web`.
 - Two accounts **User A** and **User B** where isolation is tested.
-- **Cloud Storage requires the Blaze plan.** If it isn't provisioned, cafés
+- **Cloud Storage requires the Blaze plan.** Provisioned on `my-cafe-journal`
+  since 2026-08-24, so §4.6 is runnable there. On a project where it isn't, cafés
   without photos save fine and cafés with photos fail on upload — treat §4.6 as
-  blocked rather than failing.
+  blocked rather than failing, and TC-PHOTO-06 as the case that covers it.
 
 ### Tooling note
 

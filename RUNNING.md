@@ -16,17 +16,18 @@ npx -y firebase-tools@latest --version
 
 ## One-time setup
 
-> **Status on this machine (2026-08-03):** steps 1–7 are **done** against project
+> **Status on this machine (2026-08-24):** steps 1–7 are **done** against project
 > `my-cafe-journal`. Two apps are registered — iOS
 > `1:1027531417032:ios:89701d8fae8cfdc413ccfd` (bundle
 > `com.christopherjtp.cafejournal`) and Web
 > `1:1027531417032:web:2ea9d1364a5f7a2d13ccfd`. Email/Password and Google are
-> enabled, Firestore rules are live, and `frontend/.env` is filled in.
+> enabled, Firestore and Storage rules are live, **Cloud Storage is provisioned**
+> so café photos upload, and `frontend/.env` is filled in.
 >
-> **Three things remain:** Cloud Storage isn't provisioned (see step 5b); there is
-> **no Android app registered** (step 3), so Google Sign-in fails on the Android
-> builds EAS produces; and of the `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values only the
-> iOS one is filled in (step 6). Email/password sign-in works throughout.
+> **What remains is Google Sign-in on Android:** no Android app is registered
+> (step 3), so there is no Android OAuth client and
+> `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` is blank (steps 3b and 6). The button is
+> disabled on Android builds; email/password works everywhere.
 > The steps below are kept for setting the project up from scratch elsewhere.
 
 ### 1. Sign in to Firebase
@@ -147,7 +148,13 @@ npx -y firebase-tools@latest deploy --only storage --project my-cafe-journal
 ```
 
 Until this is done, adding a café **without** photos works fine; adding one **with**
-photos fails on upload.
+photos fails on upload. Both parts matter: with a bucket but no deployed rules the
+upload still fails, and it fails as a *permission* error rather than a missing-bucket
+one, which reads like a bug in the app.
+
+Check the bucket's name matches `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` in `.env`
+(and in the EAS environments). Projects created from late 2024 get
+`<project>.firebasestorage.app`; older ones get `<project>.appspot.com`.
 
 `firestore.rules` and `storage.rules` scope every read and write to the signed-in
 owner. **Review them before you share the app** — see the note at the end.
@@ -422,8 +429,6 @@ dependency or an `app.json` native setting changes.
   load and falls back to a stand-in that reports `ready: false`. Before that guard
   existed, `expo-auth-session` threw during `AuthProvider`'s first render and took
   the whole app down at launch, on a build where everything else worked.
-- **Cloud Storage still isn't provisioned** (setup step 5b), so photo upload fails
-  in builds exactly as it does locally.
 
 ---
 
