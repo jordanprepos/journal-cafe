@@ -13,19 +13,7 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Attach cafe photos to your journal entries",
-        "NSCameraUsageDescription": "Capture cafe photos for your journal",
-        "CFBundleURLTypes": [
-          {
-            "CFBundleURLSchemes": [
-              "com.googleusercontent.apps.1027531417032-dqlptnku7te11qo5h8sdmt27fvfhjmf9"
-            ]
-          },
-          {
-            "CFBundleURLSchemes": [
-              "frontend"
-            ]
-          }
-        ]
+        "NSCameraUsageDescription": "Capture cafe photos for your journal"
       }
     },
     "android": {
@@ -68,7 +56,13 @@
           "locationWhenInUsePermission": "Café Journal uses your location to sort your logged cafés by how near they are."
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.1027531417032-dqlptnku7te11qo5h8sdmt27fvfhjmf9"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

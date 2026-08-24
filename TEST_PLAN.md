@@ -179,34 +179,53 @@ Two mechanical aids are worth knowing:
 
 ---
 **TC-GOOG-01 — Google sign-in on device**
-- **Precondition:** Expo Go; `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` / `_ANDROID_CLIENT_ID` set.
-- **Objective:** expo-auth-session flow completes and signs in.
+- **Precondition:** A development or preview build — **not Expo Go**, which does
+  not bundle the native module. `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` set, and a
+  Firebase Android app carrying the SHA-1 of the keystore that signed this APK.
+- **Objective:** The native Google SDK returns an ID token and Firebase accepts it.
 - **Type:** Positive
-- **Expected:** Signed in; `Profile` shows the Google display name.
+- **Expected:** Account chooser opens; after picking an account, signed in and
+  `Profile` shows the Google display name.
 
 ---
 **TC-GOOG-02 — Google sign-in dismissed**
-- **Objective:** Dismissing the sheet is not an error.
+- **Objective:** Dismissing the chooser is not an error.
 - **Type:** Positive (edge)
 - **Expected:** `loginWithGoogle()` resolves **false**; no error copy rendered; user stays on Login.
+  Note the SDK reports this as a `{ type: "cancelled" }` **return value**, not a
+  rejection; a second tap while the sheet is open rejects with `IN_PROGRESS` and
+  is also swallowed.
 
 ---
-**TC-GOOG-03 — Button disabled until the request is ready**
+**TC-GOOG-03 — Button disabled when the build can't sign in**
 - **Objective:** `googleReady` gates the button.
 - **Type:** Positive
-- **Expected:** `google-signin-button` is disabled until the OAuth request is prepared.
+- **Expected:** `google-signin-button` is disabled whenever
+  `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` is absent, or the app is running under Expo
+  Go, or (on iOS) `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` is absent. Enabled otherwise
+  — there is no asynchronous "request preparing" state any more, so it does not
+  flicker from disabled to enabled after mount.
 
 ---
-**TC-GOOG-05 — Native build with no OAuth client for the platform**
-- **Precondition:** Native build where the current platform's
-  `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` is unset — an Android APK today, since no
-  Android OAuth client exists.
+**TC-GOOG-06 — Expo Go**
+- **Precondition:** `yarn start`, opened in Expo Go.
+- **Objective:** A missing native module costs you Google sign-in, not the app.
+- **Type:** Negative (environmental)
+- **Expected:** App launches normally; `google-signin-button` renders **disabled**;
+  email/password sign-in and every other screen work. Expo Go remains the way to
+  exercise location and photo features.
+
+---
+**TC-GOOG-05 — Native build with no web client ID**
+- **Precondition:** Native build where `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` is unset.
 - **Objective:** A missing client ID costs you Google sign-in, not the app.
 - **Type:** Negative
 - **Expected:** App launches to Login; `google-signin-button` renders **disabled**;
   email/password sign-in works normally. Regression guard: before the module-level
   check in `useGoogleSignIn`, `expo-auth-session` threw inside `AuthProvider`'s
-  first render and the app died at launch.
+  first render and the app died at launch. The mechanism changed but the invariant
+  did not — `AuthProvider` still calls this hook unconditionally, so it must never
+  throw at import or first render.
 
 ---
 **TC-GOOG-04 — Google sign-in on web from an unauthorized domain**
@@ -866,6 +885,12 @@ removed rather than renumbered.
   `min_length=1` went with the backend; the client trims (TC-AUTH-08, TC-UI-14).
 - **Inline base64 photos near MongoDB's 16 MB ceiling.** Photos now live in
   Cloud Storage with a 10 MiB per-object rule (TC-PHOTO-01, TC-PHOTO-04).
+- **Google sign-in on Android moved off `expo-auth-session`.** Google disabled
+  custom-URI-scheme redirects for Android OAuth clients, so the browser flow
+  failed with `Error 400: invalid_request — Custom URI scheme is not enabled for
+  your Android client` and no console setting could re-enable it. Native sign-in
+  now goes through `@react-native-google-signin/google-signin`, which returns an
+  ID token with no redirect involved (TC-GOOG-01). Web is unchanged.
 - **A missing Google OAuth client crashed native builds at launch.**
   `expo-auth-session` throws when the current platform's client ID is
   `undefined`, and `AuthProvider` — which wraps the whole app — called the hook

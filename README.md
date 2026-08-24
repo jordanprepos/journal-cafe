@@ -48,7 +48,7 @@ Café entries sync in **realtime** — an edit on your phone lands on every othe
 - **Expo Router 6** — file-based routing
 - **React 19** + **TypeScript**
 - **expo-image-picker** — multi-photo upload
-- **expo-auth-session** — Google OAuth on device
+- **@react-native-google-signin/google-signin** — Google sign-in on device
 - **@react-native-async-storage/async-storage** — Firebase Auth session persistence
 - **react-native-safe-area-context**, **react-native-reanimated**, **react-native-gesture-handler**
 - **@expo/vector-icons** (Ionicons)
@@ -102,7 +102,7 @@ No server to run or deploy. The app is a direct Firebase client.
 │   │   ├── firebase/
 │   │   │   ├── config.ts             ← App / Auth / Firestore / Storage init
 │   │   │   ├── persistence.ts(.web)  ← AsyncStorage vs localStorage sessions
-│   │   │   └── google-signin.ts(.web)← expo-auth-session vs popup
+│   │   │   └── google-signin.ts(.web)← native Google SDK vs popup
 │   │   ├── api/client.ts             ← Firestore CRUD + realtime subscriptions
 │   │   ├── hooks/                    ← use-cafes (live data), fonts, safe-area
 │   │   ├── context/AuthContext.tsx   ← Global auth state
@@ -173,9 +173,8 @@ All config lives in `frontend/.env` — see [`frontend/.env.example`](./frontend
 | `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET`               | Cloud Storage bucket for café photos                         |
 | `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`          | Project number                                               |
 | `EXPO_PUBLIC_FIREBASE_APP_ID`                       | Web app ID                                                   |
-| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`                  | Google OAuth client — used by `yarn web`                     |
-| `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`                  | Google OAuth client — used by expo-auth-session on iOS       |
-| `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`              | Google OAuth client — used by expo-auth-session on Android   |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`                  | Google OAuth client — required on every platform             |
+| `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`                  | Google OAuth client — iOS URL scheme                         |
 | `EXPO_PACKAGER_PROXY_URL`, `EXPO_PACKAGER_HOSTNAME` | Set automatically by the dev environment — **do not modify** |
 
 > **None of these are secrets.** They're public client identifiers; access control
@@ -276,7 +275,7 @@ users/{uid}/cafes/{cafeId}/{timestamp}-{index}.jpg
 ## Authentication Flow
 
 ```
-1. User signs in with Email/Password or Google (expo-auth-session on device,
+1. User signs in with Email/Password or Google (native Google SDK on device,
    signInWithPopup on web)
 2. Firebase persists the session — AsyncStorage on native, localStorage on web
 3. onAuthStateChanged in AuthContext publishes the user on boot and on every change

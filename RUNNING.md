@@ -24,10 +24,10 @@ npx -y firebase-tools@latest --version
 > enabled, Firestore and Storage rules are live, **Cloud Storage is provisioned**
 > so café photos upload, and `frontend/.env` is filled in.
 >
-> **What remains is Google Sign-in on Android:** no Android app is registered
-> (step 3), so there is no Android OAuth client and
-> `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` is blank (steps 3b and 6). The button is
-> disabled on Android builds; email/password works everywhere.
+> **What remains is Google Sign-in on Android:** the Android app and its SHA-1
+> are registered (steps 3 and 3b) and the Android OAuth client exists, but no
+> build has yet confirmed the button works end to end. Email/password works
+> everywhere.
 > The steps below are kept for setting the project up from scratch elsewhere.
 
 ### 1. Sign in to Firebase
@@ -74,8 +74,12 @@ List them again any time with `apps:list --project my-cafe-journal`.
 
 Registering the Android app is not enough for Google Sign-in. Google identifies an
 Android caller by package name **plus the SHA-1 of the certificate that signed the
-APK**, and it only mints an Android OAuth client once a fingerprint exists. Skip
-this and step 6's `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` has no value to hold.
+APK**, and it only mints an Android OAuth client once a fingerprint exists.
+
+The app never sends that client's ID — the native SDK proves identity with the
+package name and signature instead — so there is no `EXPO_PUBLIC_*` variable for
+it. The client must nonetheless exist, or Google rejects the sign-in. This is the
+step that is easy to skip and gives no direct error when you do.
 
 Read the fingerprint of the keystore EAS signs with — it generates one on your
 first Android build:
@@ -96,7 +100,7 @@ npx -y firebase-tools@latest apps:android:sha:create <ANDROID_APP_ID> <SHA1> \
 If your CLI version lacks that subcommand, use the console: *Project settings →
 Your apps → the Android app → Add fingerprint*.
 
-Then read the client ID back out — it is the `oauth_client` entry with
+Confirm the client was actually minted — the `oauth_client` entry with
 `"client_type": 1`:
 
 ```bash
@@ -104,9 +108,10 @@ npx -y firebase-tools@latest apps:sdkconfig ANDROID <ANDROID_APP_ID> \
   --project my-cafe-journal
 ```
 
-That command prints a `google-services.json`. **You don't need the file** — this
-app reads its config from `EXPO_PUBLIC_*`, not from `google-services.json`. Only
-the client ID matters; it goes in `.env` at step 6.
+That command prints a `google-services.json`. **You need neither the file nor the
+ID** — this app reads its config from `EXPO_PUBLIC_*`, and the Android client is
+matched by package name and signature rather than by ID. You are only checking
+that it exists.
 
 If no `client_type: 1` entry appears, don't assume the client wasn't created —
 `sdkconfig` can lag behind. Check **Google Cloud Console → APIs & Services →
@@ -177,19 +182,17 @@ cp frontend/.env.example frontend/.env
 npx -y firebase-tools@latest apps:sdkconfig WEB --project my-cafe-journal
 ```
 
-Copy the values into `frontend/.env`. The three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID`
-entries are the per-platform OAuth clients — Google verifies a caller differently
-on each platform, so they are not interchangeable and only the current platform's
-ID is read at runtime:
+Copy the values into `frontend/.env`. The `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID`
+entries are OAuth clients, and Google verifies a caller differently on each
+platform, so they are not interchangeable:
 
-| Variable | Comes from |
-| --- | --- |
-| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | `deploy --only auth` (step 4) |
-| `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | `deploy --only auth` (step 4) |
-| `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` | the SHA-1 you attached in step 3b |
+| Variable | Needed for | Comes from |
+| --- | --- | --- |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | **every platform** — it is the audience of the ID token the native SDK returns | `deploy --only auth` (step 4) |
+| `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | iOS only — the URL scheme the config plugin registers | `deploy --only auth` (step 4) |
 
-All three are listed under **Google Cloud Console → APIs & Services →
-Credentials** for the same project.
+There is deliberately no Android entry; see step 3b. Both are listed under
+**Google Cloud Console → APIs & Services → Credentials** for the same project.
 
 > `.env` is gitignored. **Create it before starting Metro** — Expo bakes
 > `EXPO_PUBLIC_*` vars in at startup, so edits while it's running require a restart.
@@ -335,7 +338,7 @@ Each build profile in `eas.json` declares the environment it reads
 cd frontend
 npx -y eas-cli@latest env:set --scope project --visibility plaintext \
   --environment preview --environment development \
-  --name EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID \
+  --name EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID \
   --value "<the client ID>"
 ```
 
@@ -466,14 +469,13 @@ dependency or an `app.json` native setting changes.
 - **iOS device builds need a paid Apple Developer account** ($99/yr) for ad-hoc
   provisioning. Without one, add `"ios": { "simulator": true }` to a profile in
   `eas.json` and run the result on a macOS Simulator.
-- **Google Sign-In is unavailable on Android builds.** Of the three
-  `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values only the iOS one is set, and no Firebase
-  Android app is registered to generate the Android one — see steps 3, 3b and 6.
-  The button renders disabled and email/password is the way in. It is no longer
-  fatal: `useGoogleSignIn` checks for the current platform's client ID at module
-  load and falls back to a stand-in that reports `ready: false`. Before that guard
-  existed, `expo-auth-session` threw during `AuthProvider`'s first render and took
-  the whole app down at launch, on a build where everything else worked.
+- **Google Sign-In needs a development or preview build.** The native SDK is not
+  bundled in Expo Go, so the button renders disabled there and email/password is
+  the way in — `yarn start` stays the tool for location and photo work.
+  An unconfigured build degrades the same way rather than failing: `useGoogleSignIn`
+  checks at module load and reports `ready: false`. That check is load-bearing —
+  `AuthProvider` calls the hook unconditionally, and when `expo-auth-session` threw
+  there the whole app died at launch on a build where everything else worked.
 
 ---
 

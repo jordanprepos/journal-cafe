@@ -8,7 +8,7 @@ import { getReactNativePersistence } from "firebase/auth";
 export const authPersistence = getReactNativePersistence(AsyncStorage);
 
 /**
- * Popup sign-in is web-only — native goes through expo-auth-session instead, so
+ * Popup sign-in is web-only — native goes through Google's native SDK instead, so
  * there's no resolver to install here. See persistence.web.ts.
  */
 export const authPopupResolver = undefined;
