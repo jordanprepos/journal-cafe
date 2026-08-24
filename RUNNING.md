@@ -17,14 +17,16 @@ npx -y firebase-tools@latest --version
 ## One-time setup
 
 > **Status on this machine (2026-08-03):** steps 1–7 are **done** against project
-> `my-cafe-journal`. Both apps are registered — iOS
+> `my-cafe-journal`. Two apps are registered — iOS
 > `1:1027531417032:ios:89701d8fae8cfdc413ccfd` (bundle
 > `com.christopherjtp.cafejournal`) and Web
 > `1:1027531417032:web:2ea9d1364a5f7a2d13ccfd`. Email/Password and Google are
 > enabled, Firestore rules are live, and `frontend/.env` is filled in.
 >
-> **Two things remain:** Cloud Storage isn't provisioned (see step 5b), and the
-> `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values in `.env` are still blank (step 6).
+> **Three things remain:** Cloud Storage isn't provisioned (see step 5b); there is
+> **no Android app registered** (step 3), so Google Sign-in fails on the Android
+> builds EAS produces; and of the `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values only the
+> iOS one is filled in (step 6). Email/password sign-in works throughout.
 > The steps below are kept for setting the project up from scratch elsewhere.
 
 ### 1. Sign in to Firebase
@@ -51,17 +53,64 @@ npx -y firebase-tools@latest use my-cafe-journal
 
 ### 3. Register the apps
 
-An **Apple (iOS)** app, matching `ios.bundleIdentifier` in `frontend/app.json`, and a
-**Web** app, which is what Expo Go and `yarn web` actually load:
+One per platform you ship. **Web** is what Expo Go and `yarn web` load; **iOS** and
+**Android** must match `ios.bundleIdentifier` and `android.package` in
+`frontend/app.json` — both are `com.christopherjtp.cafejournal`.
 
 ```bash
+npx -y firebase-tools@latest apps:create WEB "Café Journal Web" --project my-cafe-journal
+
 npx -y firebase-tools@latest apps:create IOS "Café Journal iOS" \
   --bundle-id com.christopherjtp.cafejournal --project my-cafe-journal
 
-npx -y firebase-tools@latest apps:create WEB "Café Journal Web" --project my-cafe-journal
+npx -y firebase-tools@latest apps:create ANDROID "Café Journal Android" \
+  --package-name com.christopherjtp.cafejournal --project my-cafe-journal
 ```
 
 List them again any time with `apps:list --project my-cafe-journal`.
+
+#### 3b. Attach a signing fingerprint to the Android app
+
+Registering the Android app is not enough for Google Sign-in. Google identifies an
+Android caller by package name **plus the SHA-1 of the certificate that signed the
+APK**, and it only mints an Android OAuth client once a fingerprint exists. Skip
+this and step 6's `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` has no value to hold.
+
+Read the fingerprint of the keystore EAS signs with — it generates one on your
+first Android build:
+
+```bash
+cd frontend
+npx -y eas-cli@latest credentials
+# Android → the build profile → Keystore: Manage everything… → SHA-1 Fingerprint
+```
+
+Attach it:
+
+```bash
+npx -y firebase-tools@latest apps:android:sha:create <ANDROID_APP_ID> <SHA1> \
+  --project my-cafe-journal
+```
+
+If your CLI version lacks that subcommand, use the console: *Project settings →
+Your apps → the Android app → Add fingerprint*.
+
+Then read the client ID back out — it is the `oauth_client` entry with
+`"client_type": 1`:
+
+```bash
+npx -y firebase-tools@latest apps:sdkconfig ANDROID <ANDROID_APP_ID> \
+  --project my-cafe-journal
+```
+
+That command prints a `google-services.json`. **You don't need the file** — this
+app reads its config from `EXPO_PUBLIC_*`, not from `google-services.json`. Only
+the client ID matters; it goes in `.env` at step 6.
+
+> **The SHA-1 is per signing key.** This one covers APKs that EAS signs. A Play
+> Store release re-signed by Play App Signing has a different fingerprint, which
+> has to be added here as a second one — otherwise sign-in works everywhere except
+> the store build.
 
 ### 4. Enable sign-in providers
 
@@ -111,8 +160,18 @@ npx -y firebase-tools@latest apps:sdkconfig WEB --project my-cafe-journal
 ```
 
 Copy the values into `frontend/.env`. The three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID`
-entries come from **Google Cloud Console → APIs & Services → Credentials**, created
-by the `deploy --only auth` in step 4.
+entries are the per-platform OAuth clients — Google verifies a caller differently
+on each platform, so they are not interchangeable and only the current platform's
+ID is read at runtime:
+
+| Variable | Comes from |
+| --- | --- |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | `deploy --only auth` (step 4) |
+| `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | `deploy --only auth` (step 4) |
+| `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` | the SHA-1 you attached in step 3b |
+
+All three are listed under **Google Cloud Console → APIs & Services →
+Credentials** for the same project.
 
 > `.env` is gitignored. **Create it before starting Metro** — Expo bakes
 > `EXPO_PUBLIC_*` vars in at startup, so edits while it's running require a restart.
@@ -355,17 +414,14 @@ dependency or an `app.json` native setting changes.
 - **iOS device builds need a paid Apple Developer account** ($99/yr) for ad-hoc
   provisioning. Without one, add `"ios": { "simulator": true }` to a profile in
   `eas.json` and run the result on a macOS Simulator.
-- **The three `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values are still blank** (setup
-  step 6), so Google Sign-In is unavailable — the button renders disabled and
-  email/password is the way in. It is no longer fatal: `useGoogleSignIn` checks
-  for the current platform's client ID at module load and falls back to a
-  stand-in that reports `ready: false`. Before that guard existed,
-  `expo-auth-session` threw during `AuthProvider`'s first render and took the
-  whole app down at launch, on a build where everything else worked. Create the
-  OAuth clients and push the values whenever you want the button live.
-- **No Firebase *Android* app is registered** — only iOS and Web. Android builds
-  run, but native Google Sign-In needs an Android OAuth client registered against
-  the EAS keystore's SHA-1, which `npx -y eas-cli@latest credentials` prints.
+- **Google Sign-In is unavailable on Android builds.** Of the three
+  `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` values only the iOS one is set, and no Firebase
+  Android app is registered to generate the Android one — see steps 3, 3b and 6.
+  The button renders disabled and email/password is the way in. It is no longer
+  fatal: `useGoogleSignIn` checks for the current platform's client ID at module
+  load and falls back to a stand-in that reports `ready: false`. Before that guard
+  existed, `expo-auth-session` threw during `AuthProvider`'s first render and took
+  the whole app down at launch, on a build where everything else worked.
 - **Cloud Storage still isn't provisioned** (setup step 5b), so photo upload fails
   in builds exactly as it does locally.
 
