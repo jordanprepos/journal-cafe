@@ -149,14 +149,15 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       quality: 0.6,
-      base64: true,
       allowsMultipleSelection: false,
     });
-    if (!result.canceled && result.assets[0]?.base64) {
-      const uri = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      setPhotos((p) => [...p, uri]);
+    // Keep the local URI rather than base64: the uploader reads it with fetch,
+    // and a base64 string would otherwise sit in memory and in the render tree
+    // until the café is saved.
+    if (!result.canceled && result.assets[0]?.uri) {
+      setPhotos((p) => [...p, result.assets[0].uri]);
     }
   }
 

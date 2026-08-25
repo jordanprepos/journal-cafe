@@ -156,13 +156,19 @@ One-shot access exists for imperative flows (`api.listCafes`, `api.getCafe`,
 `api.createCafe`, `api.updateCafe`, `api.deleteCafe`). `computeStats(cafes)`
 does client-side what the old `/api/stats` endpoint did server-side.
 
-Two constraints that shape this file:
+Three constraints that shape this file:
 
-- **Photos never go in Firestore.** The picker produces
-  `data:image/jpeg;base64,...` URIs and a Firestore document caps at 1 MiB — a
-  single phone photo can exceed that alone. `uploadPhotos` writes each one to
-  Cloud Storage and the document keeps only the download URL. Already-uploaded
-  `https` URLs pass through untouched.
+- **Photos never go in Firestore.** The picker hands over a local URI
+  (`file://` on device) and a Firestore document caps at 1 MiB — a single phone
+  photo can exceed that alone. `uploadPhotos` reads each with `fetch`, writes the
+  blob to Cloud Storage, and the document keeps only the download URL.
+  Already-uploaded `https` URLs pass through untouched.
+- **Upload with `uploadBytes`, never `uploadString(..., "data_url")`.** The
+  latter decodes to a `Uint8Array` and the SDK wraps it in `new Blob([view])`,
+  which React Native rejects: *"Creating blobs from 'ArrayBuffer' and
+  'ArrayBufferView' are not supported"*. It fails only on device, so web testing
+  will not catch it. Pass `contentType` explicitly too — `storage.rules` requires
+  `image/.*` and the default is `application/octet-stream`.
 - **Firestore rejects `undefined` outright.** `stripUndefined` guards every
   write; optional fields are typed `?: T | null` and should be written as
   `null`, not omitted-as-undefined.

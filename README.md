@@ -221,7 +221,7 @@ computeStats(cafes);                // the old /api/stats aggregation, client-si
 
 ### Photos
 
-`CafeForm` still produces `data:image/jpeg;base64,...` URIs. On save, `client.ts` uploads each one to Cloud Storage and stores only the download URL — Firestore
+`CafeForm` hands over the picker's local URI. On save, `client.ts` reads it with `fetch`, uploads the blob to Cloud Storage and stores only the download URL — Firestore
 documents cap at **1 MiB**, which a single phone photo can exceed on its own.
 
 ---
