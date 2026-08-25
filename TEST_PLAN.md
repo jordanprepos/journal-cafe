@@ -504,15 +504,28 @@ surfaces as **`permission-denied`**, never a field-level message.
 - **Objective:** The central storage constraint.
 - **Type:** Positive
 - **Steps:**
-  - Given photos picked as `data:image/jpeg;base64,...`
+  - Given photos picked from the library, held as local `file://` URIs
   - When the café is saved
-- **Expected:** Each uploads to `users/{uid}/cafes/{cafeId}/{timestamp}-{index}.jpg`; the **document holds only download URLs**. A Firestore document caps at 1 MiB, which a single phone photo can exceed on its own.
+- **Expected:** Each uploads to `users/{uid}/cafes/{cafeId}/{timestamp}-{index}.{ext}` with a `contentType` taken from the blob; the **document holds only download URLs**. A Firestore document caps at 1 MiB, which a single phone photo can exceed on its own.
 
 ---
 **TC-PHOTO-02 — Photos are filed under the café's own ID**
 - **Objective:** Cover the create-then-patch ordering.
 - **Type:** Positive
 - **Expected:** The document is created first (with `photos: []`) so uploads can use its ID, then patched with the URLs. Keeps cleanup to a single folder.
+
+---
+**TC-PHOTO-08 — A failed upload leaves no café behind**
+- **Objective:** The create-then-patch ordering must not survive its own failure.
+- **Type:** Negative
+- **Steps:**
+  - Given a café with at least one photo, and an upload that will fail (point
+    `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` at a nonexistent bucket to force it)
+  - When Save is tapped
+- **Expected:** The error surfaces in `form-error` **and the Journal gains no
+  café** — the document written before the upload is rolled back, and any objects
+  that did upload are deleted. Regression guard: the document used to survive, so
+  a failed save silently added a café and every retry added another.
 
 ---
 **TC-PHOTO-03 — Removing a photo during an edit deletes the object**
@@ -870,7 +883,7 @@ removed rather than renumbered.
 | RISK-02 | **Medium** | Stats chart is labelled **"Last 6 months"** but returns the last 6 months *containing data* (`slice(-6)`). After an inactive stretch it presents stale months as recent. | `computeStats` / `stats.tsx` | TC-STAT-05 |
 | RISK-03 | **Medium** | **Listener errors are invisible.** `useCafes`/`useCafe` expose `error`, but no screen reads it — a rules rejection or offline failure renders as an empty journal. Most likely to bite right after a rules change. | `(tabs)/*`, `cafe/[id].tsx` | TC-UI-27 |
 | RISK-04 | **Medium (process)** | Adding a café field without updating `isValidCafe` **and redeploying** makes every write fail with `permission-denied`, which reads as an auth bug rather than a validation one. | `firestore.rules` | TC-RULE-13 |
-| RISK-05 | **Low** | Storage cleanup is best-effort: a failed object delete is swallowed, leaving orphaned photos billed against the project. Deliberate — a cleanup failure shouldn't fail the user's action. | `deletePhotos` | TC-DEL-03 |
+| RISK-05 | **Low** | Storage cleanup is best-effort: a failed object delete is swallowed, leaving orphaned photos billed against the project. Deliberate — a cleanup failure shouldn't fail the user's action. Narrowed since: a partly-failed upload now deletes the objects that did land rather than abandoning them. | `deletePhotos`, `uploadPhotos` | TC-DEL-03, TC-PHOTO-08 |
 | RISK-06 | **Low/Med** | Storage **download URLs carry their own access token**, so anyone with the full URL can fetch the photo regardless of the path rules. Fine while URLs stay in the owner's documents; matters if they're ever shared. | `uploadPhotos`, `storage.rules` | TC-ISO-05 |
 | RISK-07 | **Medium** | **No pagination.** `subscribeCafes` has no `limit()`, so every café is fetched and held live. Read cost and memory grow linearly with the journal. | `subscribeCafes` | TC-SEC-03 |
 | RISK-08 | **Low** | On web the Firebase session lives in localStorage (no Keychain), exposing it to XSS. Acceptable for scope; note for production. | `persistence.web.ts` | TC-SEC-05 |

@@ -17,7 +17,7 @@ import {
   deleteObject,
   getDownloadURL,
   ref,
-  uploadString,
+  uploadBytes,
 } from "firebase/storage";
 
 import type { Facility } from "@/src/constants/facilities";
@@ -114,24 +114,51 @@ function fromDoc(id: string, data: any): Cafe {
 }
 
 // ── Photos ────────────────────────────────────────────────────────────────
-// The picker hands us `data:image/jpeg;base64,...` URIs. Those would blow
-// Firestore's 1 MiB document ceiling, so they go to Cloud Storage and the
-// document keeps only the download URL. Already-uploaded https URLs pass through.
+// The picker hands us a local URI (`file://` on device, `blob:`/`data:` on web).
+// The image itself would blow Firestore's 1 MiB document ceiling, so it goes to
+// Cloud Storage and the document keeps only the download URL. Photos already
+// uploaded — an `https` URL loaded from an existing café — pass through.
+//
+// `fetch(uri).blob()` rather than `uploadString(..., "data_url")`: the latter
+// decodes to a Uint8Array and the SDK wraps it in `new Blob([view])`, which React
+// Native's Blob does not support and rejects with "Creating blobs from
+// 'ArrayBuffer' and 'ArrayBufferView' are not supported". fetch works on every
+// URI shape either platform produces, so both share this path.
+//
+// `contentType` must be set explicitly: uploadBytes otherwise defaults to
+// application/octet-stream and storage.rules requires `image/.*`.
 
 async function uploadPhotos(
   uid: string,
   cafeId: string,
   photos: string[],
 ): Promise<string[]> {
-  return await Promise.all(
+  const results = await Promise.allSettled(
     photos.map(async (photo, idx) => {
-      if (!photo.startsWith("data:")) return photo;
-      const path = `users/${uid}/cafes/${cafeId}/${Date.now()}-${idx}.jpg`;
+      if (/^https?:/.test(photo)) return photo;
+      const blob = await (await fetch(photo)).blob();
+      const contentType = blob.type || "image/jpeg";
+      const ext = contentType.split("/")[1]?.split("+")[0] ?? "jpg";
+      const path = `users/${uid}/cafes/${cafeId}/${Date.now()}-${idx}.${ext}`;
       const objectRef = ref(fbStorage, path);
-      await uploadString(objectRef, photo, "data_url");
+      await uploadBytes(objectRef, blob, { contentType });
       return await getDownloadURL(objectRef);
     }),
   );
+
+  const failed = results.find((r) => r.status === "rejected");
+  if (failed) {
+    // Don't leave the uploads that did succeed behind — nothing will reference
+    // them once this write is abandoned.
+    const uploaded = results
+      .filter((r) => r.status === "fulfilled")
+      .map((r) => r.value)
+      .filter((url) => !photos.includes(url));
+    await deletePhotos(uploaded);
+    throw failed.reason;
+  }
+
+  return results.map((r) => (r as PromiseFulfilledResult<string>).value);
 }
 
 /** Best-effort cleanup — a failed delete shouldn't fail the user's action. */
@@ -258,7 +285,18 @@ export const api = {
       photos: [],
       created_at: serverTimestamp(),
     });
-    const photos = await uploadPhotos(uid, created.id, data.photos ?? []);
+
+    let photos: string[];
+    try {
+      photos = await uploadPhotos(uid, created.id, data.photos ?? []);
+    } catch (e) {
+      // The document is already committed. Leaving it would show the user a
+      // failed save that nonetheless added a café to their journal — and every
+      // retry would add another. Best-effort, like deletePhotos: a failed
+      // rollback must not mask the error that caused it.
+      await deleteDoc(created).catch(() => {});
+      throw e;
+    }
     if (photos.length) await updateDoc(created, { photos });
     return { ...(data as Cafe), id: created.id, photos, created_at: new Date().toISOString() };
   },
