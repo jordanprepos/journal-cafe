@@ -128,6 +128,30 @@ function fromDoc(id: string, data: any): Cafe {
 // `contentType` must be set explicitly: uploadBytes otherwise defaults to
 // application/octet-stream and storage.rules requires `image/.*`.
 
+/**
+ * Read a local URI into a Blob.
+ *
+ * XMLHttpRequest rather than `fetch(uri).blob()`: React Native reads a fetch
+ * response into an ArrayBuffer and then calls `new Blob([buffer])`, which its own
+ * Blob rejects with "Creating blobs from 'ArrayBuffer' and 'ArrayBufferView' are
+ * not supported". `uploadString(..., "data_url")` lands on the same constructor
+ * from the other direction. XHR with `responseType: "blob"` is implemented
+ * natively and never builds one from a buffer.
+ *
+ * This fails only on device — every one of these paths works on web, so a
+ * regression here will not show up in `yarn web`.
+ */
+async function readAsBlob(uri: string): Promise<Blob> {
+  return await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = () => resolve(xhr.response as Blob);
+    xhr.onerror = () => reject(new Error("Couldn't read the selected photo."));
+    xhr.responseType = "blob";
+    xhr.open("GET", uri, true);
+    xhr.send(null);
+  });
+}
+
 async function uploadPhotos(
   uid: string,
   cafeId: string,
@@ -136,13 +160,20 @@ async function uploadPhotos(
   const results = await Promise.allSettled(
     photos.map(async (photo, idx) => {
       if (/^https?:/.test(photo)) return photo;
-      const blob = await (await fetch(photo)).blob();
-      const contentType = blob.type || "image/jpeg";
-      const ext = contentType.split("/")[1]?.split("+")[0] ?? "jpg";
-      const path = `users/${uid}/cafes/${cafeId}/${Date.now()}-${idx}.${ext}`;
-      const objectRef = ref(fbStorage, path);
-      await uploadBytes(objectRef, blob, { contentType });
-      return await getDownloadURL(objectRef);
+      const blob = await readAsBlob(photo);
+      try {
+        const contentType = blob.type || "image/jpeg";
+        const ext = contentType.split("/")[1]?.split("+")[0] ?? "jpg";
+        const path = `users/${uid}/cafes/${cafeId}/${Date.now()}-${idx}.${ext}`;
+        const objectRef = ref(fbStorage, path);
+        await uploadBytes(objectRef, blob, { contentType });
+        return await getDownloadURL(objectRef);
+      } finally {
+        // React Native's blobs are native-backed and are not freed when the JS
+        // object is collected. Two phone photos otherwise stay resident for the
+        // lifetime of the process.
+        (blob as Blob & { close?: () => void }).close?.();
+      }
     }),
   );
 
