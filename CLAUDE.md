@@ -160,15 +160,20 @@ Three constraints that shape this file:
 
 - **Photos never go in Firestore.** The picker hands over a local URI
   (`file://` on device) and a Firestore document caps at 1 MiB — a single phone
-  photo can exceed that alone. `uploadPhotos` reads each with `fetch`, writes the
-  blob to Cloud Storage, and the document keeps only the download URL.
+  photo can exceed that alone. `uploadPhotos` reads each into a blob, writes it
+  to Cloud Storage, and the document keeps only the download URL.
   Already-uploaded `https` URLs pass through untouched.
-- **Upload with `uploadBytes`, never `uploadString(..., "data_url")`.** The
-  latter decodes to a `Uint8Array` and the SDK wraps it in `new Blob([view])`,
-  which React Native rejects: *"Creating blobs from 'ArrayBuffer' and
-  'ArrayBufferView' are not supported"*. It fails only on device, so web testing
-  will not catch it. Pass `contentType` explicitly too — `storage.rules` requires
-  `image/.*` and the default is `application/octet-stream`.
+- **Get that blob from `XMLHttpRequest`, never `fetch(uri).blob()` or
+  `uploadString(..., "data_url")`.** Both end at `new Blob([view])`, which React
+  Native rejects: *"Creating blobs from 'ArrayBuffer' and 'ArrayBufferView' are
+  not supported"* — `uploadString` decodes base64 to a `Uint8Array`, and RN's
+  `fetch` reads the body into an ArrayBuffer first. Only `responseType: "blob"`
+  on XHR is native-backed. See `readAsBlob` in `src/api/client.ts`, and
+  `blob.close()` after upload, since native blobs are not garbage-collected with
+  the JS object. **All of this works on web**, so `yarn web` will not catch a
+  regression — it fails only on device. Pass `contentType` explicitly too:
+  `storage.rules` requires `image/.*` and `uploadBytes` defaults to
+  `application/octet-stream`.
 - **Firestore rejects `undefined` outright.** `stripUndefined` guards every
   write; optional fields are typed `?: T | null` and should be written as
   `null`, not omitted-as-undefined.

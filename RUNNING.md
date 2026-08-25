@@ -401,13 +401,34 @@ at the repo root, and not `frontend/.eas/` either. There are exactly two:
 
 | File | Trigger | Builds |
 | --- | --- | --- |
-| `create-preview-builds.yml` | every push to `main` | Android, `preview` profile |
+| `create-preview-builds.yml` | push to `main` — **only once the repo is connected**, see above | Android, `preview` profile |
 | `create-production-builds.yml` | on demand | Android, `production` profile |
+
+That connection is also what makes **`on:` triggers work at all**. A workflow can
+declare `on: push` and still never fire, silently: EAS only learns a push
+happened if the repository is linked under **Project → GitHub** on expo.dev, and
+it only finds `frontend/.eas/workflows/` if the base directory above is set. No
+error appears anywhere — the workflow file simply looks correct and nothing runs.
+
+Check with:
 
 ```bash
 cd frontend
+npx -y eas-cli@latest workflow:view
+```
+
+**Every run showing `Manual` means no trigger has ever fired**, however the YAML
+reads. A working connection attributes runs to the push instead. Until then,
+merging to `main` builds nothing and you start builds by hand:
+
+```bash
+npx -y eas-cli@latest workflow:run create-preview-builds.yml
 npx -y eas-cli@latest workflow:run create-production-builds.yml
 ```
+
+`workflow:view` lists history, not a queue, so it also shows runs of workflow
+files that no longer exist — `preview-builds.yml` still appears from before it
+was renamed. Those entries can't be pruned and are harmless.
 
 A workflow builds whatever `profile` its jobs name. Omitting `profile` silently
 builds `production`, which is the default — so always state it.
