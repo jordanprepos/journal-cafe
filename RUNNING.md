@@ -16,18 +16,18 @@ npx -y firebase-tools@latest --version
 
 ## One-time setup
 
-> **Status on this machine (2026-08-24):** steps 1–7 are **done** against project
-> `my-cafe-journal`. Two apps are registered — iOS
-> `1:1027531417032:ios:89701d8fae8cfdc413ccfd` (bundle
-> `com.christopherjtp.cafejournal`) and Web
-> `1:1027531417032:web:2ea9d1364a5f7a2d13ccfd`. Email/Password and Google are
-> enabled, Firestore and Storage rules are live, **Cloud Storage is provisioned**
-> so café photos upload, and `frontend/.env` is filled in.
+> **Status on this machine (2026-08-25):** steps 1–7 are **done** against project
+> `my-cafe-journal`, and **nothing is outstanding**. Three apps are registered —
+> Web `1:1027531417032:web:2ea9d1364a5f7a2d13ccfd`, iOS
+> `1:1027531417032:ios:89701d8fae8cfdc413ccfd` and Android, all on bundle /
+> package `com.christopherjtp.cafejournal`. Email/Password and Google are
+> enabled, Firestore and Storage rules are live, Cloud Storage is provisioned so
+> café photos upload, and `frontend/.env` is filled in.
 >
-> **What remains is Google Sign-in on Android:** the Android app and its SHA-1
-> are registered (steps 3 and 3b) and the Android OAuth client exists, but no
-> build has yet confirmed the button works end to end. Email/password works
-> everywhere.
+> **Google Sign-in works on Android**, confirmed on a preview build: the Android
+> app carries the SHA-1 of the EAS keystore (step 3b) and the native SDK signs in
+> end to end. The one platform still out of reach is **iOS**, which needs a paid
+> Apple Developer account before any build can be installed on a device.
 > The steps below are kept for setting the project up from scratch elsewhere.
 
 ### 1. Sign in to Firebase
@@ -116,7 +116,7 @@ that it exists.
 If no `client_type: 1` entry appears, don't assume the client wasn't created —
 `sdkconfig` can lag behind. Check **Google Cloud Console → APIs & Services →
 Credentials** on the same project, where it shows as *Android client for
-com.christopherjtp.cafejournal*, and copy the ID from there:
+com.christopherjtp.cafejournal*:
 
 https://console.cloud.google.com/apis/credentials?project=my-cafe-journal
 
