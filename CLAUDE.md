@@ -46,73 +46,8 @@ committing. There is no automated test suite (see [Testing](#testing)).
 Yarn 1.22 is pinned via `packageManager` in `frontend/package.json`. Do not use
 npm or pnpm.
 
-Rules and provider changes only take effect once deployed:
-
-```bash
-npx -y firebase-tools@latest deploy --only firestore,storage
-npx -y firebase-tools@latest deploy --only auth
-```
-
-Always invoke the Firebase CLI through `npx -y firebase-tools@latest`.
-
-Native builds go through EAS on expo.dev. **There is no `android/` or `ios/`
-directory** — the project is CNG, so EAS runs `prebuild` for both platforms in
-the cloud on every build and `app.json` is the single source of truth for native
-config. Both paths are gitignored; if a local `npx expo prebuild` leaves them
-behind, delete them rather than committing them.
-
-Building for a **physical iPhone is not currently possible**: every profile is
-`distribution: internal`, which on iOS means ad-hoc provisioning and so a paid
-Apple Developer account. The EAS workflows build Android only — see RUNNING.md
-for how to add iOS back once that account exists.
-
-```bash
-cd frontend
-yarn build:dev:android       # development build (expo-dev-client), APK
-yarn build:preview:android   # standalone internal build, APK
-yarn start --dev-client      # Metro for an installed development build
-```
-
-Same convention as Firebase: the CLI is always `npx -y eas-cli@latest`, never a
-local install. `EXPO_PUBLIC_*` values reach cloud builds through EAS environment
-variables, not `.env` (which is gitignored and therefore never uploaded) — each
-`eas.json` build profile names the environment it reads. See
-**[RUNNING.md](./RUNNING.md)** for linking the project and pushing those values.
-
-## Layout
-
-```
-firebase.json              Auth providers + rules wiring
-firestore.rules            Per-user access + write validation for café docs
-storage.rules              Per-user access for photos (10 MiB, image/* only)
-dev-up.sh / dev-down.sh    Local dev
-design_guidelines.json     Original design brief (reference, not source of truth)
-scripts/                   One-off MongoDB → Firestore migration
-
-frontend/
-  app/                     Expo Router routes — files here ARE the routes
-    _layout.tsx            Root: GestureHandler → SafeArea → Theme → fonts → Auth → Stack
-    index.tsx              Splash, then redirects to (tabs) or (auth)/login
-    +html.tsx              Web HTML shell
-    (auth)/                login, register
-    (tabs)/                index (Journal), places, stats, profile
-    cafe/                  new, [id] (detail), edit/[id]
-
-  src/                     Everything that is not a route
-    api/client.ts          The ONLY module that talks to Firestore/Storage
-    hooks/use-cafes.ts     useCafes() / useCafe(id) — live, preferred
-    hooks/                 use-app-fonts, use-icon-fonts, use-safe-top
-    context/AuthContext.tsx
-    firebase/              config.ts, persistence.ts(.web), google-signin.ts(.web)
-    theme/                 Light/dark theme system — see below
-    components/            CafeForm, GoogleSignInButton, StarPicker
-    constants/             currencies, facilities, tags, timezones
-    utils/                 distance, geocode, maps, price, storage/(.web)
-
-  app.json                 Expo config, permissions, typedRoutes
-  .env                     EXPO_PUBLIC_* — gitignored, see .env.example
-  scripts/check-pkg.js     preinstall guard, blocks deprecated packages
-```
+Deploying Firebase rules/auth config, and building native Android apps via EAS,
+is covered by the `deploy` skill.
 
 ## Routing
 
@@ -188,18 +123,7 @@ The Firestore auto-generated document ID is the café's `id`. `created_at` is a
 server `Timestamp`, set once and pinned by the rules; the client converts it to
 an ISO string on read so `Cafe.created_at` is always a `string`.
 
-### Adding or changing a café field: four coordinated edits
-
-Miss any one and it fails at runtime, often unhelpfully:
-
-1. `CafeInput` / `Cafe` in `src/api/client.ts` — the types.
-2. The `fromDoc` default in the same file — without it, cafés written before
-   the field existed fail to deserialize.
-3. `src/components/CafeForm.tsx` — the shared add/edit form.
-4. `isValidCafe` in `firestore.rules`, **then redeploy the rules.** The rules
-   validate on create *and* update, and anything not explicitly permitted is
-   denied. Skipping this makes every write fail with a *permission* error, which
-   looks nothing like the validation error it actually is.
+Adding or changing a café field is covered by the `add-cafe-field` skill.
 
 ## Auth
 
