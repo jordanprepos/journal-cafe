@@ -10,6 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.christopherjtp.cafejournal",
+      "icon": {
+        "light": "./assets/images/icon.png",
+        "dark": "./assets/images/icon-dark.png"
+      },
       "supportsTablet": true,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Attach cafe photos to your journal entries",
@@ -20,7 +24,8 @@
       "package": "com.christopherjtp.cafejournal",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "monochromeImage": "./assets/images/adaptive-icon-monochrome.png",
+        "backgroundColor": "#FBF6EC"
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
@@ -44,7 +49,7 @@
           "resizeMode": "contain",
           "backgroundColor": "#FBF6EC",
           "dark": {
-            "image": "./assets/images/splash-image.png",
+            "image": "./assets/images/splash-image-dark.png",
             "backgroundColor": "#1F1A17"
           }
         }
