@@ -6,7 +6,8 @@ import { useAuth } from "@/src/context/AuthContext";
 type CafesState = { cafes: Cafe[]; loading: boolean; error: string };
 
 /**
- * Live list of the signed-in user's cafés, newest first.
+ * Live list of the signed-in user's cafés, newest-logged first. The Journal
+ * screen re-sorts by visited_date on top of this — see byVisitedDesc.
  *
  * Firestore pushes every change, so screens using this don't need to refetch on
  * focus — an edit made on another device (or in another tab) lands here on its own.

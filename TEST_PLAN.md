@@ -831,6 +831,29 @@ release-blocking.
   - When the Journal loads
 - **Expected (current):** `useCafes` sets `error`, but **no screen reads it** — all four call sites destructure only `cafes`/`cafe` and `loading`. The user sees the empty state, indistinguishable from having no cafés. See RISK-03.
 
+---
+**TC-UI-28 — Date filtering on the Journal** *(belongs with TC-UI-03..07; numbered last to keep existing IDs stable)*
+- **Objective:** Cover the preset and custom `visited_date` filters.
+- **Type:** Positive + Negative
+- **Precondition:** Cafés with `visited_date` spread across several months, plus one with a malformed value (e.g. `banana`).
+- **Steps:**
+  - When `date-filter-month` / `date-filter-3months` / `date-filter-year` is tapped
+  - When `date-filter-custom` is tapped and `date-from-input` / `date-to-input` are filled
+- **Expected:**
+  - Each preset narrows the grid to visits in that window, ending today; tapping the active chip again clears it.
+  - The malformed-date café is excluded whenever any date filter is applied — consistent with `computeStats` dropping it from `by_month`. See RISK-01.
+  - An open custom panel with blank or half-typed bounds filters nothing: `tag-filter-all` stays active and `clear-filters` does not appear. A `from` later than `to` yields no matches.
+  - Date, tag and facility filters AND together; `tag-filter-all` / `clear-filters` resets all three and empties the custom inputs.
+
+---
+**TC-UI-29 — Default Journal order is by visited date** *(belongs with TC-UI-09; numbered last to keep existing IDs stable)*
+- **Objective:** Cover `byVisitedDesc`, which re-sorts on top of the created_at order Firestore returns.
+- **Type:** Positive
+- **Steps:**
+  - Given a café backfilled today for a visit last month, alongside one logged earlier for a recent visit
+  - And a café whose `visited_date` is blank or malformed
+- **Expected:** With `sort-recent` active, the grid reads newest visit first, so the backfilled café does **not** jump to the top. Blank/malformed dates sink to the bottom, most-recently-logged first. Two cafés sharing a visit date fall back to logged order. `sort-nearby` still overrides with distance order.
+
 ### 4.10 Security & non-functional
 
 ---
