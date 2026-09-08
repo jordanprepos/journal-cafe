@@ -209,7 +209,8 @@ async function deletePhotos(urls: string[]): Promise<void> {
 // ── Realtime ──────────────────────────────────────────────────────────────
 
 /**
- * Live view of the signed-in user's cafés, newest first. Fires immediately with
+ * Live view of the signed-in user's cafés, ordered by created_at — i.e. newest
+ * *logged* first, which is not the same as most recently visited. Fires immediately with
  * the cached list, then again on every local or remote change. Returns the
  * unsubscribe function — call it on unmount.
  */

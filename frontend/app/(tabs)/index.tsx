@@ -19,6 +19,14 @@ import { useCafes } from "@/src/hooks/use-cafes";
 import { FACILITIES, Facility } from "@/src/constants/facilities";
 import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 import { distanceKm, formatDistance } from "@/src/utils/distance";
+import {
+  byVisitedDesc,
+  isIsoDay,
+  matchesDateRange,
+  presetRange,
+  type DatePreset,
+  type DateRange,
+} from "@/src/utils/date-range";
 
 type SortMode = "recent" | "nearby";
 type CafeWithDistance = Cafe & { _distanceKm?: number };
@@ -42,6 +50,14 @@ function cardTags(tags: string[] | undefined, activeTag: string | null): string[
   const rest = list.filter((t) => t.toLowerCase() !== activeTag.toLowerCase());
   return [...matched, ...rest].slice(0, CARD_TAG_LIMIT);
 }
+
+// Ranges all end today. "3 months" is this month plus the two before it, so it
+// stays a whole-month window rather than a rolling 90 days.
+const DATE_PRESETS: { key: Exclude<DatePreset, "custom">; label: string }[] = [
+  { key: "month", label: "This month" },
+  { key: "3months", label: "3 months" },
+  { key: "year", label: "This year" },
+];
 
 // Scatter angles for the polaroid tiles, cycled by index so the grid reads as
 // a hand-laid page rather than a uniform grid.
@@ -77,8 +93,23 @@ export default function Journal() {
   const [locError, setLocError] = useState("");
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [facilityFilter, setFacilityFilter] = useState<Facility[]>([]);
+  const [datePreset, setDatePreset] = useState<DatePreset | null>(null);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
-  const anyFilterActive = activeTag !== null || facilityFilter.length > 0;
+  // Null means "not constraining anything". A half-typed or empty custom bound
+  // is dropped rather than applied, so the grid stays put until the date is
+  // actually complete — and an open-but-blank custom panel is not a filter.
+  const dateRange = useMemo<DateRange | null>(() => {
+    if (datePreset === null) return null;
+    if (datePreset !== "custom") return presetRange(datePreset);
+    const from = isIsoDay(customFrom) ? customFrom : null;
+    const to = isIsoDay(customTo) ? customTo : null;
+    return from === null && to === null ? null : { from, to };
+  }, [datePreset, customFrom, customTo]);
+
+  const anyFilterActive =
+    activeTag !== null || facilityFilter.length > 0 || dateRange !== null;
 
   function toggleFacilityFilter(key: Facility) {
     setFacilityFilter((f) => (f.includes(key) ? f.filter((x) => x !== key) : [...f, key]));
@@ -87,6 +118,9 @@ export default function Journal() {
   function clearFilters() {
     setActiveTag(null);
     setFacilityFilter([]);
+    setDatePreset(null);
+    setCustomFrom("");
+    setCustomTo("");
   }
 
   // Opt-in: only prompt for GPS when the user taps "Nearby".
@@ -145,6 +179,9 @@ export default function Journal() {
       // Facilities are ANDed — the café must have every selected one.
       const facs = c.facilities ?? [];
       if (!facilityFilter.every((f) => facs.includes(f))) return false;
+      // A café whose visited_date is blank or malformed never matches a date
+      // window — see matchesDateRange.
+      if (dateRange && !matchesDateRange(c.visited_date, dateRange)) return false;
       if (!q) return true;
       return (
         c.name.toLowerCase().includes(q) ||
@@ -154,7 +191,7 @@ export default function Journal() {
       );
     });
 
-    if (sortMode !== "nearby" || !coords) return matched;
+    if (sortMode !== "nearby" || !coords) return matched.sort(byVisitedDesc);
 
     // Attach distance where coordinates exist; cafés without coords sink last.
     const withDist: CafeWithDistance[] = matched.map((c) => ({
@@ -170,7 +207,7 @@ export default function Journal() {
       if (b._distanceKm == null) return -1;
       return a._distanceKm - b._distanceKm;
     });
-  }, [cafes, query, activeTag, facilityFilter, sortMode, coords]);
+  }, [cafes, query, activeTag, facilityFilter, dateRange, sortMode, coords]);
 
   const gridData: GridItem[] = useMemo(
     () =>
@@ -263,6 +300,38 @@ export default function Journal() {
           </Text>
         </TouchableOpacity>
 
+        {DATE_PRESETS.map((p) => {
+          const on = datePreset === p.key;
+          return (
+            <TouchableOpacity
+              key={p.key}
+              style={[styles.chip, on && styles.chipActive]}
+              onPress={() => setDatePreset(on ? null : p.key)}
+              testID={`date-filter-${p.key}`}
+            >
+              <Text style={[styles.chipText, on && styles.chipTextActive]}>{p.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+        {/* Lights on the panel being open, not on the range being applied —
+            otherwise tapping it with blank bounds would leave it looking off. */}
+        <TouchableOpacity
+          style={[styles.chip, datePreset === "custom" && styles.chipActive]}
+          onPress={() => setDatePreset((p) => (p === "custom" ? null : "custom"))}
+          testID="date-filter-custom"
+        >
+          <Ionicons
+            name="calendar-outline"
+            size={12}
+            color={datePreset === "custom" ? colors.onInverseSurface : colors.textSecondary}
+          />
+          <Text
+            style={[styles.chipText, datePreset === "custom" && styles.chipTextActive]}
+          >
+            Custom
+          </Text>
+        </TouchableOpacity>
+
         {availableTags.map((t) => {
           const on = activeTag?.toLowerCase() === t.toLowerCase();
           return (
@@ -296,6 +365,30 @@ export default function Journal() {
           );
         })}
       </ScrollView>
+
+      {/* A plain View, deliberately: it defaults to flexShrink 0, so unlike the
+          ScrollView above it can't be squeezed by a full grid. Either bound may
+          be left blank for an open-ended window. */}
+      {datePreset === "custom" ? (
+        <View style={styles.dateRangeRow}>
+          <TextInput
+            style={styles.dateInput}
+            value={customFrom}
+            onChangeText={setCustomFrom}
+            placeholder="From YYYY-MM-DD"
+            placeholderTextColor={colors.textMuted}
+            testID="date-from-input"
+          />
+          <TextInput
+            style={styles.dateInput}
+            value={customTo}
+            onChangeText={setCustomTo}
+            placeholder="To YYYY-MM-DD"
+            placeholderTextColor={colors.textMuted}
+            testID="date-to-input"
+          />
+        </View>
+      ) : null}
 
       {locError ? (
         <Text style={styles.locError} testID="location-error">
@@ -464,6 +557,19 @@ const makeStyles = themedStyles(({ colors, shadows, raisedOutline }: Theme) => (
   chipActive: { backgroundColor: colors.inverseSurface },
   chipText: { fontFamily: FONTS.sansSemi, color: colors.textSecondary, fontSize: 11 },
   chipTextActive: { color: colors.onInverseSurface },
+  dateRangeRow: { flexDirection: "row", gap: 8, paddingHorizontal: 20, marginBottom: 8 },
+  dateInput: {
+    flex: 1,
+    // Matches the chip row it sits under: same pill, same fill, no shadow —
+    // spreading shadows.card here also breaks TextInput's TextStyle typing.
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: RADII.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    fontFamily: FONTS.sans,
+    fontSize: 12,
+    color: colors.textPrimary,
+  },
   locError: {
     fontFamily: FONTS.sans,
     color: colors.textMuted,
