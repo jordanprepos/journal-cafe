@@ -15,9 +15,11 @@ copy the output across. Nothing in `../images/` should be hand-edited.
 | `adaptive-foreground.svg` | Derived. Android adaptive-icon foreground. |
 | `adaptive-monochrome.svg` | Derived. Android 13+ themed-icon layer. |
 | `favicon.svg` | Derived. Web favicon. |
+| `icon-dark.svg` | Derived. iOS 18 dark app icon, transparent. |
 
 The four `cafe-journal-*.svg` files are the originals as supplied, C2PA provenance
-metadata intact. The three derived files are re-framings of the same four shapes.
+metadata intact. The four derived files re-frame or re-ground those same shapes; none of
+them introduces new geometry.
 
 Every colour here is already a `src/theme/palette.ts` token — `#FBF6EC` background,
 `#B85C38` primary, `#D4A373` star, `#1F1A17` dark background, `#3E2A1F` textPrimary.
@@ -59,9 +61,30 @@ Two things to know about it:
   an opaque layer would render as a solid square. Because it is pure `#000` on white,
   coverage is recoverable exactly as `a = 255 - v`, `rgb = 0`. Post-process the render
   accordingly.
+- `icon-dark.svg` also needs alpha, but it is two light colours rather than pure black, so
+  the shortcut above does not apply. Render it **twice**, over a white ground and a black
+  one, and solve:
 
-`icon.png`, `icon-dark.png`, `splash-image.png` and `splash-image-dark.png` are the
-supplied 1024px PNGs copied verbatim — no rasterising involved. The splash images are
+  ```
+  over white:  Rw = fg·a + 255·(1 − a)
+  over black:  Rb = fg·a
+  =>           a  = 255 − (Rw − Rb),   fg = Rb / a
+  ```
+
+  Exact for any number of colours, and well-conditioned even for near-white art — for the
+  cream cup it reduces to `a = 255a`. Composite the result over a mid-grey to check the
+  un-premultiply left no dark fringe on the anti-aliased edges.
+
+`icon.png`, `splash-image.png` and `splash-image-dark.png` are the supplied 1024px PNGs
+copied verbatim — no rasterising involved.
+
+`icon-dark.png` is **not** a copy of the supplied night art. Apple composites an iOS 18
+dark icon over a system dark gradient, so it is rendered from `icon-dark.svg` with a
+transparent ground; shipping the night variant's own `#1F1A17` ground would flatten it to
+a plain tile. Its framing is otherwise identical to the light icon so the two register.
+Expo relies on this — `withIosIcons` strips transparency from the light and tinted
+variants but deliberately preserves it on the dark one. The **splash** dark image keeps
+its ground: nothing composites that one. The splash images are
 full-bleed on purpose: their grounds equal the splash `backgroundColor` in `app.json`
 (`#FBF6EC` / `#1F1A17`), so under `resizeMode: "contain"` the square is invisible and only
 the cup reads.
