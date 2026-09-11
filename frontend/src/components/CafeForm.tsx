@@ -29,6 +29,10 @@ import { addTag, hasTag, removeTag, MAX_TAGS, PRESET_TAGS } from "@/src/constant
 import { FACILITIES, Facility } from "@/src/constants/facilities";
 import { FONTS, RADII, themedStyles, useTheme, useThemedStyles, type Theme } from "@/src/theme";
 
+/** Each photo is uploaded in parallel, so the cap bounds concurrent uploads
+ *  and how many native blobs are resident at once. */
+const MAX_PHOTOS = 10;
+
 interface Props {
   title: string;
   initial?: Cafe;
@@ -142,7 +146,12 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
   // Rendered after the presets, always in the selected state.
   const customTags = tags.filter((t) => !PRESET_TAGS.some((p) => p.toLowerCase() === t.toLowerCase()));
 
-  async function pickPhoto() {
+  async function pickPhotos() {
+    const remaining = MAX_PHOTOS - photos.length;
+    if (remaining <= 0) {
+      setError(`You can add up to ${MAX_PHOTOS} photos per café.`);
+      return;
+    }
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       setError("Photo access permission denied.");
@@ -151,14 +160,21 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       quality: 0.6,
-      allowsMultipleSelection: false,
+      allowsMultipleSelection: true,
+      // Native only — on web the limit is enforced by the slice below.
+      selectionLimit: remaining,
     });
-    // Keep the local URI rather than base64: the uploader reads it with fetch,
-    // and a base64 string would otherwise sit in memory and in the render tree
+    // Keep the local URIs rather than base64: the uploader reads them with XHR,
+    // and base64 strings would otherwise sit in memory and in the render tree
     // until the café is saved.
-    if (!result.canceled && result.assets[0]?.uri) {
-      setPhotos((p) => [...p, result.assets[0].uri]);
+    if (result.canceled) return;
+    // The picker reopens with an empty selection, so the same photo can be
+    // chosen again on a second pass; the same URI is the same file.
+    const fresh = result.assets.map((a) => a.uri).filter((uri) => uri && !photos.includes(uri));
+    if (fresh.length > remaining) {
+      setError(`Only the first ${remaining} photos were added — the limit is ${MAX_PHOTOS} per café.`);
     }
+    setPhotos((p) => [...p, ...fresh.slice(0, remaining)]);
   }
 
   function removePhoto(idx: number) {
@@ -280,7 +296,7 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
           {photos.length === 0 ? (
             <TouchableOpacity
               style={styles.dropzone}
-              onPress={pickPhoto}
+              onPress={pickPhotos}
               testID="add-photo-button"
             >
               <Ionicons name="camera-outline" size={26} color={colors.primary} />
@@ -310,7 +326,7 @@ export function CafeForm({ title, initial, onSave, saving }: Props) {
                   </View>
                 ))}
                 <TouchableOpacity
-                  onPress={pickPhoto}
+                  onPress={pickPhotos}
                   style={[styles.thumb, styles.thumbAdd]}
                   testID="add-photo-button"
                 >
