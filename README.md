@@ -8,8 +8,26 @@ Café entries sync in **realtime** — an edit on your phone lands on every othe
 
 ---
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/journal.jpg" alt="Journal feed with café photo cards, search, and date filters" height="480"><br><sub><b>Journal</b></sub></td>
+    <td align="center"><img src="docs/screenshots/places.jpg" alt="Places list with Open in Google Maps links" height="480"><br><sub><b>Places</b></sub></td>
+    <td align="center"><img src="docs/screenshots/stats.jpg" alt="Stats: cafés visited, average rating, 5-star favourites, top drink, last-6-months chart" height="480"><br><sub><b>Stats</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/profile.jpg" alt="Profile with Light/Dark/System appearance control and location backfill" height="480"><br><sub><b>Profile</b></sub></td>
+    <td align="center"><img src="docs/screenshots/new-cafe.jpg" alt="New café form with photos, ratings, price range, facilities, tags, and notes" height="480"><br><sub><b>New café</b></sub></td>
+    <td></td>
+  </tr>
+</table>
+
+---
+
 ## Table of Contents
 
+- [Screenshots](#screenshots)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
@@ -77,6 +95,8 @@ No server to run or deploy. The app is a direct Firebase client.
 ├── scripts/                          ← One-off MongoDB → Firestore migration
 │   ├── export-mongo-cafes.py
 │   └── import-cafes-to-firestore.mjs
+│
+├── docs/screenshots/                 ← App screenshots used in this README
 │
 ├── frontend/                         ← Expo React Native app
 │   ├── app/                          ← File-based routes (Expo Router)
